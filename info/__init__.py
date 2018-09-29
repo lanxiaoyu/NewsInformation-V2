@@ -7,8 +7,6 @@ from flask_session import Session
 import logging
 from logging.handlers import RotatingFileHandler
 
-from info.moduls.index import index_bp
-
 """
  因为manage中需要传入 db,而db的产生需要传入app
  但是:
@@ -19,7 +17,9 @@ from info.moduls.index import index_bp
  """
 # 暂时没有app对象,就不会去初始化,只是声明一下
 db = SQLAlchemy()
-# 同样的方法,redis数据库的声明(全局变量)
+
+# 同样的方法,redis数据库的声明(全局变量),
+# 因为在视图函数中使用redis存储kv数据时需要导入
 redis_store = None  # type:StrictRedis
 
 "工厂方法,传入配置名称--->返回对应的配置app对象"
@@ -79,6 +79,8 @@ def create_app(config_name):
     Session(app)
 
     # 注册蓝图
+    from info.moduls.index import index_bp  # 解决循环导入问题,因为导入别的模块时,到他时 他卡住了redis_store的创建
+    # 放在这里的原因是index_app只在这里才用的上
     app.register_blueprint(index_bp)
 
     return app

@@ -1,3 +1,4 @@
+from info import redis_store
 from . import index_bp
 import logging
 from flask import current_app
@@ -6,6 +7,9 @@ from flask import current_app
 # 2.使用蓝图对象
 @index_bp.route('/index')
 def index():
+    # 使用redis对象存储kv数据
+    redis_store.set("name", "ywk")
+
     logging.debug("我是debug级别日志")
     logging.info("我是infog级别日志")
     logging.warning("我是warning级别日志")
