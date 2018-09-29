@@ -2,6 +2,7 @@ from info import redis_store
 from . import index_bp
 import logging
 from flask import current_app
+from info.models import User
 
 
 # 2.使用蓝图对象
