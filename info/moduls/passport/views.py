@@ -1,4 +1,5 @@
-from flask import request, current_app, abort, make_response
+from flask import request, current_app, abort,make_response
+
 from info import redis_store, constants
 from info.utils.captcha.captcha import captcha
 from . import passport_bp
@@ -24,7 +25,7 @@ def get_image_code():
 
     #     3.2以code_id作为key将生成的验证码图片的真实值保存到redis中
     try:
-        redis_store.setex("imageCodeId_%s" % code_id, constants.IMAGE_CODE_REDIS_EXPIRES, real_image_code)
+        redis_store.setex("imageCodeId_%s"%code_id,constants.IMAGE_CODE_REDIS_EXPIRES,real_image_code)
     except Exception as e:
         current_app.logger.error(e)
         abort(500)
@@ -36,3 +37,4 @@ def get_image_code():
     # 设置响应数据的类型为Content-Type："image/JPEG"
     response.headers["Content-Type"] = "image/JPEG"
     return response
+
