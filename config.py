@@ -1,4 +1,5 @@
 from redis import StrictRedis
+import logging
 
 
 class Config(object):
@@ -33,10 +34,16 @@ class DevelopmentConfig(Config):
     """开发环境的项目配置信息"""
     DEBUG = True
 
+    # 开发者环境:日志级别-->debug
+    LOG_LEVEL = logging.DEBUG
+
 
 class ProductionConfig(Config):
     """线上模式的配置信息"""
     DEBUG = False
+
+    # 线上环境:日志级别-->WARING
+    LOG_LEVEL = logging.WARNING
 
 
 # 给外界暴露一个使用配置类的接口
