@@ -64,8 +64,12 @@ def create_app(config_name):
     db.init_app(app)
 
     # 3.创建redis数据库对象
+    # decode_responses=True 能够将二进制数据decode成字符串返回
     global redis_store
-    redis_store = StrictRedis(host=config_class.REDIS_HOST, port=config_class.REDIS_PORT, db=config_class.REDIS_NUM)
+    redis_store = StrictRedis(host=config_class.REDIS_HOST,
+                              port=config_class.REDIS_PORT,
+                              db=config_class.REDIS_NUM,
+                              decode_responses=True)
 
     # 4.开启csrf保护机制
     """
@@ -73,7 +77,7 @@ def create_app(config_name):
     2.自动获取ajax请求头中的csrf_token
     3.自己校验这2个值
     """
-    csrf = CSRFProtect(app)
+    # csrf = CSRFProtect(app)
 
     # 5.创建session对象,将session的储存方法进行调整(flask后端内存-->redis数据库)
     Session(app)
