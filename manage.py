@@ -5,46 +5,20 @@ from flask_wtf.csrf import CSRFProtect, generate_csrf
 from flask_session import Session
 from flask_script import Manager
 from flask_migrate import Migrate, MigrateCommand
-
-
-class Config(object):
-    DEBUG = True
-
-    # mysql数据库的配置信息
-    SQLALCHEMY_DATABASE_URI = "mysql://root:mysql@127.0.0.1:3306/NewsInformation_v2"
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
-
-    # redis数据库的配置信息
-    REDIS_HOST = "127.0.0.1"
-    REDIS_PORT = 6379
-    REDIS_NUM = 1
-
-    SECRET_KEY = "DSFYGHEGEHJOUHGJIBRREJBJ"
-
-    # 通过flask-session扩展.,将flask中的session(内存)调整到redis的配置信息
-    # <1>储存数据库类型:redis
-    SESSION_TYPE = "redis"
-    # <2>将redis实例对象进行传入
-    SESSION_REDIS = StrictRedis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_NUM)
-    # <3>对session数据进行加密,需要配置SECRET_KEY
-    SESSION_USE_SIGNER = True
-    # <4>关闭永久储存
-    SESSION_PERMANENT = False
-    # <5>过期时长(24小时)
-    PERMANENT_SESSION_LIFETIME = 86400
-
+from config import config_dict
 
 # 1.创建app对象
 app = Flask(__name__)
 
 # 将配置类注册到app上
-app.config.from_object(Config)
+config_class = config_dict["development"]  # 有开发者决定当前所处的环境
+app.config.from_object(config_class)
 
 # 2.创建数据库对象
 db = SQLAlchemy(app)
 
 # 3.创建redis数据库对象
-redis_store = StrictRedis(host=Config.REDIS_HOST, port=Config.REDIS_PORT, db=Config.REDIS_NUM)
+redis_store = StrictRedis(host=config_class.REDIS_HOST, port=config_class.REDIS_PORT, db=config_class.REDIS_NUM)
 
 # 4.开启csrf保护机制
 """
