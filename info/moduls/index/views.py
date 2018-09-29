@@ -1,22 +1,20 @@
 from info import redis_store
 from . import index_bp
-import logging
-from flask import current_app
 from info.models import User
+from flask import render_template, current_app
 
 
 # 2.使用蓝图对象
-@index_bp.route('/index')
+@index_bp.route('/')
 def index():
-    # 使用redis对象存储kv数据
-    redis_store.set("name", "ywk")
+    return render_template("news/index.html")
 
-    logging.debug("我是debug级别日志")
-    logging.info("我是infog级别日志")
-    logging.warning("我是warning级别日志")
-    logging.error("我是error级别日志")
-    logging.critical("我是critical级别日志")
 
-    # flask中对logging模块进行了封装,直接用current_app调用,常用的方法
-    current_app.logger.debug("falsk中记录的debug日志")
-    return "index page"
+@index_bp.route("/favicon.ico")
+def favico():
+    """返回网页图标"""
+    """
+    Function used internally to send static files from the static
+    这个方法是被内部用来发送静态文件到浏览器的
+    """
+    return current_app.send_static_file("news/favicon.ico")
