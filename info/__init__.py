@@ -7,6 +7,8 @@ from flask_session import Session
 import logging
 from logging.handlers import RotatingFileHandler
 
+from info.moduls.index import index_bp
+
 """
  因为manage中需要传入 db,而db的产生需要传入app
  但是:
@@ -75,5 +77,8 @@ def create_app(config_name):
 
     # 5.创建session对象,将session的储存方法进行调整(flask后端内存-->redis数据库)
     Session(app)
+
+    # 注册蓝图
+    app.register_blueprint(index_bp)
 
     return app
