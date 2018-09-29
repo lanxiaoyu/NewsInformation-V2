@@ -83,4 +83,7 @@ def create_app(config_name):
     # 放在这里的原因是index_app只在这里才用的上
     app.register_blueprint(index_bp)
 
+    from info.moduls.passport import passport_bp
+    app.register_blueprint(passport_bp)
+
     return app
