@@ -10,6 +10,16 @@ from . import passport_bp
 from info.models import User
 
 
+@passport_bp.route('/login_out', methods=['POST'])
+def login_out():
+    """退出登录后端接口"""
+    # 将用户登录信息清除
+    session.pop("user_id")
+    session.pop("mobile")
+    session.pop("nick_name")
+    return jsonify({"errno":RET.OK, "errmsg": '退出登录成功'})
+
+
 
 #127.0.0.1:8080/login
 @passport_bp.route('/login', methods=['POST'])
@@ -78,10 +88,6 @@ def login():
 
     # 4.1 登录成功
     return jsonify({"errno":RET.OK, "errmsg": '登录成功'})
-
-
-
-
 
 
 # 127.0.0.1:8080/passport/register

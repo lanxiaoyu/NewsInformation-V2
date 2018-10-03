@@ -342,3 +342,22 @@ function generateUUID() {
     });
     return uuid;
 }
+
+//退出登录
+function login_out() {
+    // 发起注册请求
+    $.ajax({
+        // 设置url
+         url: "/passport/login_out",
+         // 设置请求方式
+         type: "post",
+         success: function (resp) {
+            if(resp.errno == "0"){
+                // 返回成功 刷新页面
+                location.reload()
+            }else{
+
+            }
+         }
+     })
+}
