@@ -17,7 +17,7 @@ def register():
     """
     1.获取参数
         1.1  mobile  smscode   password
-    2.校验参数
+    2.校验参数 
         2.1 非空判断
         2.2 手机号格式判断
     3.逻辑处理
