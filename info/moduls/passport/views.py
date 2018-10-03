@@ -10,6 +10,80 @@ from . import passport_bp
 from info.models import User
 
 
+
+#127.0.0.1:8080/login
+@passport_bp.route('/login', methods=['POST'])
+def login():
+    """用户登录的接口"""
+    """
+    1.获取参数
+        1.1 mobile:手机号 password:密码
+    2.检验参数
+        2.1 非空判断
+        2.2 手机号格式判断
+    3.逻辑处理
+        3.1 根据mobile查询用户在不在
+        3.2 不存在:提示账户不存在
+        3.3 存在:判断密码是否填写正确
+        3.4 保存用户登录信息(更新最后一次登录时间)
+    4.返回值
+        4.1 登录成功
+    """
+
+    # 1.1 mobile: 手机号password: 密码
+    param_dict = request.json
+
+    mobile = param_dict.get("mobile")
+    password = param_dict.get("password")
+
+    # 2.1 非空判断
+    if not all([mobile,password]):
+        return jsonify({"errno":RET.PARAMERR, "errmsg": '参数不足'})
+
+    #2.2 手机号格式检验
+    if not re.match("1[35789][0-9]{9}$", mobile):
+        current_app.logger.error("手机号格式错误")
+        return jsonify({"errno":RET.PARAMERR, "errmsg": '手机号格式错误'})
+
+    # 3.1 根据mobile查询用户名是否存在
+    try:
+        user = User.query.filter(User.mobile == mobile).first()
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify({"errno":RET.DBERR, "errmsg": '数据库查询错误'})
+
+    # 3.2 不存在:提示账户不存在
+    if not user:
+        return jsonify({"errno":RET.NODATA, "errmsg": '用户不存在'})
+
+    # 3.3 存在:判断密码是否正确
+    if not user.check_passowrd(password):
+        # 密码错误
+        return jsonify({"errno":RET.DATAERR, "errmsg": '密码错误'})
+
+    # 3.4 保存登录信息
+    session["user_id"] = user.id
+    session["nick_name"] = user.nick_name
+    session["mobile"] = user.mobile
+
+    # 更新最后一次登录时间
+    user.last_login = datetime.now()
+
+    # 修改了user对象的数据，需要使用commit将数据保存到数据库
+    try:
+        db.session.commit()
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify({"errno":RET.DBERR, "errmsg": '数据库保存用户信息错误'})
+
+    # 4.1 登录成功
+    return jsonify({"errno":RET.OK, "errmsg": '登录成功'})
+
+
+
+
+
+
 # 127.0.0.1:8080/passport/register
 @passport_bp.route("/register",methods = ["POST"])
 def register():
@@ -186,7 +260,6 @@ def send_sms_code():
     # 位数不足补零
     sms_code = "%06d" % sms_code
 
-    print(sms_code)
     try:
         result = CCP().send_template_sms(mobile, {sms_code, constants.SMS_CODE_REDIS_EXPIRES / 60}, 1)
     except Exception as e:

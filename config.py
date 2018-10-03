@@ -9,6 +9,9 @@ class Config(object):
     # mysql数据库的配置信息
     SQLALCHEMY_DATABASE_URI = "mysql://root:mysql@127.0.0.1:3306/NewsInformation_v2"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # 能替换db.session.commit()
+    # 当数据库会话对象结束的时候自动提交数据到数据库
+    SQLALCHEMY_COMMIT_ON_TEARDOWN = True
 
     # redis数据库的配置信息
     REDIS_HOST = "127.0.0.1"

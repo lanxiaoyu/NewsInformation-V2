@@ -100,9 +100,11 @@ $(function(){
 		$(this).find('a')[0].click()
 	})
 
-    // TODO 登录表单提交
+
     $(".login_form_con").submit(function (e) {
+        // 阻止表单默认提交行为
         e.preventDefault()
+
         var mobile = $(".login_form #mobile").val()
         var password = $(".login_form #password").val()
 
@@ -115,8 +117,34 @@ $(function(){
             $("#login-password-err").show();
             return;
         }
-
+        //组织请求参数
+        var params = {
+             "mobile": mobile,
+            "password": password
+        }
         // 发起登录请求
+           $.ajax({
+            // 设置url
+             url: "/passport/login",
+             // 设置请求方式
+             type: "post",
+             // 将js对象转换成json字符串发送给后端
+             data: JSON.stringify(params),
+             // 声明上传的数据内容格式是 json字符串
+             contentType: "application/json",
+             dataType: 'json',
+             success: function (resp) {
+                if(resp.errno == "0"){
+                    // 返回成功 刷新页面
+                    location.reload()
+                }else{
+                    // 错误信息展示
+                    $("#login-password-err").html(resp.errmsg)
+                    $("#login-password-err").show()
+                }
+             }
+         })
+
     })
 
     $(".register_form_con").submit(function (e) {
