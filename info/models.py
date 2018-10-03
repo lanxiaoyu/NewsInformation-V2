@@ -76,6 +76,9 @@ class User(BaseModel, db.Model):
     def check_passowrd(self, password):
         return check_password_hash(self.password_hash, password)
 
+
+    # 能够将user对象转换成字典
+    # 能够隐藏数据库字段的名称
     def to_dict(self):
         resp_dict = {
             "id": self.id,
