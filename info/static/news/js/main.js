@@ -133,6 +133,10 @@ $(function(){
              // 声明上传的数据内容格式是 json字符串
              contentType: "application/json",
              dataType: 'json',
+
+                headers: {
+                "X-CSRFToken" : getCookie("csrf_token")
+            },
              success: function (resp) {
                 if(resp.errno == "0"){
                     // 返回成功 刷新页面
@@ -193,6 +197,9 @@ $(function(){
             contentType: "application/json",
             // 设置接受后端数据为json格式
            dataType: "json",
+             headers: {
+                "X-CSRFToken" : getCookie("csrf_token")
+            },
             success: function (resp) {
                 //回调函数
                 if (resp.errno == '0'){
@@ -262,6 +269,9 @@ function sendSMSCode() {
         contentType: "application/json",
         // 接受数据也是json格式
         dataType: "json",
+         headers: {
+                "X-CSRFToken" : getCookie("csrf_token")
+            },
         success:function (resp) {
             //发送短信验证码回调函数
             if(resp.errno == 0){
@@ -351,6 +361,9 @@ function login_out() {
          url: "/passport/login_out",
          // 设置请求方式
          type: "post",
+        headers: {
+                "X-CSRFToken" : getCookie("csrf_token")
+            },
          success: function (resp) {
             if(resp.errno == "0"){
                 // 返回成功 刷新页面

@@ -77,7 +77,19 @@ def create_app(config_name):
     2.自动获取ajax请求头中的csrf_token
     3.自己校验这2个值
     """
-    # csrf = CSRFProtect(app)
+    csrf = CSRFProtect(app)
+
+    # 使用钩子函数将csrf_token带回给浏览器
+    @app.after_request
+    def set_csrftoken(response):
+        """借助response.setcookie方法将csrf_token存储到浏览器"""
+        # 1. 生成csrf_token随机值
+        csrf_token =  generate_csrf()
+        # 2. 设置cookie
+        response.set_cookie("csrf_token",csrf_token)
+        # 3.返回给响应对象
+        return response
+
 
     # 5.创建session对象,将session的储存方法进行调整(flask后端内存-->redis数据库)
     Session(app)
