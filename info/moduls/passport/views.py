@@ -1,7 +1,8 @@
 import random
 import re
-from flask import request, current_app, abort, make_response, jsonify
-from info import redis_store, constants
+from datetime import datetime
+from flask import request, current_app, abort, make_response, jsonify, session
+from info import redis_store, constants, db
 from info.lib.yuntongxun.sms import CCP
 from info.utils.captcha.captcha import captcha
 from info.utils.response_code import RET
@@ -9,7 +10,87 @@ from . import passport_bp
 from info.models import User
 
 
-# 127.0.0.1:5000/passport/image_code?code_id=uuid编码
+# 127.0.0.1:8080/passport/register
+@passport_bp.route("/register",methods = ["POST"])
+def register():
+    """注册后端接口的实现"""
+    """
+    1.获取参数
+        1.1  mobile  smscode   password
+    2.校验参数
+        2.1 非空判断
+        2.2 手机号格式判断
+    3.逻辑处理
+        3.1 根据""SMS_CODE_%s" % mobile"作为key去redis中获取真实的短信验证码,如果获取到,则删除库中的数据
+        3.2 对比用户填写的
+        3.3 不相等 提示验证码填写错误
+        3.4 相等 :根据User类创建用户对象,并给其属性赋值   
+        3.5 保存到mysql中
+        3.6 一般需求:注册成功,自动登录,记录用户登录信息
+    4.返回值:注册成功
+    """
+
+    # 1.1 获取参数
+    param_dict = request.json
+
+    mobile = param_dict.get("mobile")
+    smscode = param_dict.get("smscode")
+    password = param_dict.get("password")
+
+    # 2 参数检验
+    # 2.1 非空判断
+    if not all([mobile,smscode,password]):
+        return jsonify({"errno":RET.PARAMERR, "errmsg": '参数不足'})
+    #2.2 手机号格式检验
+    if not re.match("1[35789][0-9]{9}$", mobile):
+        current_app.logger.error("手机号格式错误")
+        return jsonify({"errno":RET.PARAMERR, "errmsg": '手机号格式错误'})
+
+    # 3.1 根据""SMS_CODE_%s" % mobile"作为key去redis中获取真实的短信验证码
+    try:
+        real_smscode = redis_store.get("SMS_CODE_%s" % mobile)
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify({"errno":RET.DATAERR, "errmsg": '数据库查询错误'})
+
+    if real_smscode:
+        redis_store.delete("SMS_CODE_%s" % mobile)
+    else:
+        return jsonify({"errno":RET.DATAERR, "errmsg": '短信验证码过期'})
+
+    # 3.2 对比用户填写的
+    if smscode != real_smscode:
+        # 不相等
+        return jsonify({"errno":RET.PARAMERR, "errmsg": '验证码填写错误'})
+    else:
+        # 相等  根据User类创建用户对象,并给其属性赋值   保持到mysql中
+        user = User()
+        user.mobile = mobile
+        user.nick_name = mobile
+        user.last_login = datetime.now()
+
+        # 这一条代码实现了密码加密+保存到数据库
+        user.password = password
+
+
+        # 3.5
+        try:
+            db.session.add(user)
+            db.session.commit()
+        except Exception as e:
+            current_app.logger.error(e)
+            db.session.rollback()
+
+        # 3.6 一般需求:注册成功,自动登录,记录用户登录信息
+        session["user_id"] = user.id
+        session["nick_name"] = user.nick_name
+        session["mobile"] = user.id = user.mobile
+
+        # 4 注册成功
+        return jsonify({"errno":RET.OK, "errmsg": '注册成功'})
+
+
+# 127.0.0.1:8080/passport/image_code?code_id=uuid编码
 @passport_bp.route("image_code")
 def get_image_code():
     """获取验证码图片的后端接口"""
@@ -43,7 +124,7 @@ def get_image_code():
     return response
 
 
-# 127.0.0.1:5000/passport/sms_code
+# 127.0.0.1:8080/passport/sms_code
 @passport_bp.route("/sms_code", methods=["POST"])
 def send_sms_code():
     """点击发生短信验证码后端接口"""
@@ -98,22 +179,22 @@ def send_sms_code():
         return jsonify({"errno": RET.DATAERR, "errmsg": '查询手机好出现问题'})
 
     if user:
-        return jsonify({"errno":RET.DATAEXIST, "errmsg": '改手机号已注册'})
+        return jsonify({"errno":RET.DATAEXIST, "errmsg": '该手机号已注册'})
 
         # 3.4 相等:生成6位数验证码,发送短信
     sms_code = random.randint(0, 999999)
     # 位数不足补零
     sms_code = "%06d" % sms_code
 
-
-    try:
-        result = CCP().send_template_sms(mobile, {sms_code, constants.SMS_CODE_REDIS_EXPIRES / 60}, 1)
-    except Exception as e:
-        current_app.logger.error(e)
-        return jsonify({"errno": RET.THIRDERR, "errmsg": '云通讯发送短信失败'})
-
-    if result != 0:
-        return jsonify({"errno": RET.THIRDERR, "errmsg": '云通讯发送短信失败'})
+    print(sms_code)
+    # try:
+    #     result = CCP().send_template_sms(mobile, {sms_code, constants.SMS_CODE_REDIS_EXPIRES / 60}, 1)
+    # except Exception as e:
+    #     current_app.logger.error(e)
+    #     return jsonify({"errno": RET.THIRDERR, "errmsg": '云通讯发送短信失败'})
+    #
+    # if result != 0:
+    #     return jsonify({"errno": RET.THIRDERR, "errmsg": '云通讯发送短信失败'})
 
         # 3.5 将生成的6位随机短信吗储存到redis数据库中
     try:

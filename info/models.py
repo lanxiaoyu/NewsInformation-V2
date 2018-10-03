@@ -63,13 +63,15 @@ class User(BaseModel, db.Model):
     # news.user : 该新闻属于哪个用户
     news_list = db.relationship('News', backref='user', lazy='dynamic')
 
+    #password属性的get方法 - --> uprint(user.password) 触发get方法
     @property
     def password(self):
-        raise AttributeError("当前属性不可读")
+        raise AttributeError("当前属性不能获取")
 
+    # password属性的set方法 - --> user.password = 1214 触发set方法
     @password.setter
-    def password(self, value):
-        self.password_hash = generate_password_hash(value)
+    def password(self, password):
+        self.password_hash = generate_password_hash(password)
 
     def check_passowrd(self, password):
         return check_password_hash(self.password_hash, password)

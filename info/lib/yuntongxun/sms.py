@@ -20,33 +20,7 @@ _serverPort = "8883"
 # 说明：REST API版本号保持不变
 _softVersion = '2013-12-26'
 
-# 云通讯官方提供的发送短信代码实例
-# # 发送模板短信
-# # @param to 手机号码
-# # @param datas 内容数据 格式为数组 例如：{'12','34'}，如不需替换请填 ''
-# # @param $tempId 模板Id
-#
-# def sendTemplateSMS(to, datas, tempId):
-#     # 初始化REST SDK
 
-#      验证用户身份（每次发送短信验证都会验证）
-#     rest = REST(serverIP, serverPort, softVersion)
-#     rest.setAccount(accountSid, accountToken)
-#     rest.setAppId(appId)
-
-#     发送短信验证码
-#     result = rest.sendTemplateSMS(to, datas, tempId)
-#     for k, v in result.iteritems():
-#
-#         if k == 'templateSMS':
-#             for k, s in v.iteritems():
-#                 print '%s:%s' % (k, s)
-#         else:
-#             print '%s:%s' % (k, v)
-
-
-# c = CCP() ---> if判断能够通过，去进行用户鉴定权限操作
-# c1 = CCP() --> if判断不会通过，直接将对象返回，不会再次进行用户鉴定权限处理
 class CCP(object):
     """发送短信的辅助类"""
 

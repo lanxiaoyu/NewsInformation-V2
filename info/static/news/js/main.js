@@ -119,8 +119,6 @@ $(function(){
         // 发起登录请求
     })
 
-
-    // TODO 注册按钮点击
     $(".register_form_con").submit(function (e) {
         // 阻止默认提交操作
         e.preventDefault()
@@ -150,14 +148,42 @@ $(function(){
             return;
         }
 
-        // 发起注册请求
+        //组织请求参数
+        var params = {
+		     "mobile": mobile,
+            "smscode": smscode,
+            "password": password
+        }
 
+        // 发起注册请求
+        $.ajax({
+            url: "/passport/register",
+            type: "POST",
+            // 将js对象转换成json字符串
+            data: JSON.stringify(params),
+            // 告知后端请求数据的格式为json
+            contentType: "application/json",
+            // 设置接受后端数据为json格式
+           dataType: "json",
+            success: function (resp) {
+                //回调函数
+                if (resp.errno == '0'){
+                    // 注册成功
+                    // 刷新页面 隐藏表单
+                    window.location.reload()
+                }else{
+                     //展示错误信息
+                     $("#register-password-err").html(resp.errmsg)
+                     $("#register-password-err").show()
+                }
+            }
+
+        })
     })
 })
 
 var imageCodeId = ""
 
-// TODO 生成一个图片验证码的编号，并设置页面中图片验证码img标签的src属性
 function generateImageCode() {
 
     // 生成唯一编码  严谨一点：UUID  不是很严谨：时间戳
@@ -190,7 +216,6 @@ function sendSMSCode() {
         return;
     }
 
-    // TODO 发送短信验证码
     //准备参数 js对象
     var params = {
         "mobile": mobile,
