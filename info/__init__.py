@@ -7,6 +7,8 @@ from flask_session import Session
 import logging
 from logging.handlers import RotatingFileHandler
 
+from info.utils.common import do_index_class
+
 """
  因为manage中需要传入 db,而db的产生需要传入app
  但是:
@@ -90,6 +92,8 @@ def create_app(config_name):
         # 3.返回给响应对象
         return response
 
+    # 添加自定义的过滤器
+    app.add_template_filter(do_index_class,"do_index_class")
 
     # 5.创建session对象,将session的储存方法进行调整(flask后端内存-->redis数据库)
     Session(app)
