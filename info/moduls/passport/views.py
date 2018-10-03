@@ -105,6 +105,7 @@ def send_sms_code():
     # 位数不足补零
     sms_code = "%06d" % sms_code
 
+
     try:
         result = CCP().send_template_sms(mobile, {sms_code, constants.SMS_CODE_REDIS_EXPIRES / 60}, 1)
     except Exception as e:
