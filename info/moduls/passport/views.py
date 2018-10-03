@@ -187,14 +187,14 @@ def send_sms_code():
     sms_code = "%06d" % sms_code
 
     print(sms_code)
-    # try:
-    #     result = CCP().send_template_sms(mobile, {sms_code, constants.SMS_CODE_REDIS_EXPIRES / 60}, 1)
-    # except Exception as e:
-    #     current_app.logger.error(e)
-    #     return jsonify({"errno": RET.THIRDERR, "errmsg": '云通讯发送短信失败'})
-    #
-    # if result != 0:
-    #     return jsonify({"errno": RET.THIRDERR, "errmsg": '云通讯发送短信失败'})
+    try:
+        result = CCP().send_template_sms(mobile, {sms_code, constants.SMS_CODE_REDIS_EXPIRES / 60}, 1)
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify({"errno": RET.THIRDERR, "errmsg": '云通讯发送短信失败'})
+
+    if result != 0:
+        return jsonify({"errno": RET.THIRDERR, "errmsg": '云通讯发送短信失败'})
 
         # 3.5 将生成的6位随机短信吗储存到redis数据库中
     try:
