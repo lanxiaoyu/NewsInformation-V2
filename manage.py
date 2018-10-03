@@ -10,7 +10,7 @@ manager = Manager(app)
 # 7.数据库迁移对象
 Migrate(app, db)
 
-# 8.数据库迁移指令
+# 8.数据库迁移指令q
 manager.add_command("db", MigrateCommand)
 
 if __name__ == '__main__':
