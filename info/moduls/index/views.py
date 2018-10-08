@@ -1,7 +1,7 @@
 from info import redis_store, constants
 from info.utils.response_code import RET
 from . import index_bp
-from info.models import User, News
+from info.models import User, News, Category
 from flask import render_template, current_app, session, jsonify
 
 
@@ -45,11 +45,24 @@ def index():
         # 构建字典列表
         news_rank_dict_list.append(news_dict)
 
+    #----------获取新闻分类数据-----------
+    try:
+        categories = Category.query.all()
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify({"errno":RET.DBERR, "errmsg": '数据库查询类别错误'})
+
+    # 对象列表转换成字典列表
+    category_dict_list = []
+    for category in categories if categories else []:
+        category_dict_list.append(category.to_dict())
+
 
     # 4. 组织响应数据字典
     data = {
         "user_info":user.to_dict() if user else None,
-        "news_rank_list":news_rank_dict_list
+        "news_rank_list":news_rank_dict_list,
+        "categories":category_dict_list
     }
 
     return render_template("news/index.html",data = data)
