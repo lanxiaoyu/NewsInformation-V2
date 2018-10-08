@@ -21,6 +21,7 @@ def news_detail(news_id):
         current_app.logger.error(e)
         return jsonify({"errno": RET.DBERR, "errmsg": '数据库获取新闻错误'})
 
+
     # 字典列表初始化
     """
         # news_rank_list 对象列表===》 [news1, news2, ...新闻对象 ]
@@ -34,10 +35,24 @@ def news_detail(news_id):
         # 构建字典列表
         news_rank_dict_list.append(news_dict)
 
+    # ------------------获取新闻详细数据-----------------
+    try:
+        news = News.query.get(news_id)
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify({"errno": RET.DBERR, "errmsg": '查询新闻数据错误'})
+
+    # 将新闻对象转成字典
+    new_dict = news.to_dict() if news else None
+
+    # 用户浏览量+1
+    news.clicks += 1
+
         # 4. 组织响应数据字典
     data = {
             "user_info": user.to_dict() if user else None,
-            "news_rank_list": news_rank_dict_list
+            "news_rank_list": news_rank_dict_list,
+            "news":new_dict
         }
 
     return render_template("news/detail.html",data = data)
