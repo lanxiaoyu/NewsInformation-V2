@@ -1,8 +1,9 @@
 from info import redis_store, constants
+from info.utils.common import user_login_data
 from info.utils.response_code import RET
 from . import index_bp
 from info.models import User, News, Category
-from flask import render_template, current_app, session, jsonify, request
+from flask import render_template, current_app, session, jsonify, request, g
 
 
 @index_bp.route('/news_list')
@@ -69,21 +70,11 @@ def get_news_list():
 
 
 @index_bp.route('/')
+@user_login_data
 def index():
     # ------------------获取用户登录信息------------------
     # 1. 获取当前登录用户的id
-    user_id = session.get("user_id")
-
-    user = None  # type:User
-
-    # 2.查询用户对象
-    if user_id:
-        try:
-            # 获取用户对象
-            user = User.query.get(user_id)
-        except Exception as e:
-            current_app.logger.error(e)
-            return jsonify({"errno": RET.DBERR, "errmsg": '数据库查询用户错误'})
+    user = g.user
 
     # ------------------获取新闻点击排行数据------------------
     try:
