@@ -35,16 +35,20 @@ def get_news_list():
     page = int(page)
     per_page = int(per_page)
 
+    filters = []
+    if cid != 1:
+        # 在sqlachemy底层有重写__eq__方法,改变了返回值,返回一个查询条件
+        filters.append(News.category_id ==cid)
+
     # 3.1
     try:
-        paginate = News.query.filter(News.category_id ==cid).order_by(News.create_time.desc()).paginate(page,per_page,False)
+        paginate = News.query.filter(*filters).order_by(News.create_time.desc()).paginate(page,per_page,False)
         # 获取当前页面的所有数据
         news_list = paginate.items
         # 获取当前页码
         current_page = paginate.page
         # 获取总页数
         total_page = paginate.pages
-
     except Exception as e:
         current_app.logger.error(e)
         return jsonify({"errno":RET.DBERR, "errmsg": '查询新闻列表数据异常'})
@@ -61,7 +65,7 @@ def get_news_list():
     }
 
     # 4
-    return jsonify({"errno":RET.OK, "errmsg": 'ok'},data = data)
+    return jsonify({"errno":RET.OK, "errmsg": 'ok','data':data})
 
 
 @index_bp.route('/')
