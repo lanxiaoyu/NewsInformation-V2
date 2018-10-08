@@ -1,3 +1,5 @@
+import functools
+
 from flask import session, current_app, jsonify, g
 
 from info.utils.response_code import RET
@@ -21,14 +23,16 @@ def do_index_class(index):
 
 # 获取当前登录用户信息的装饰器
 def user_login_data(view_func):
-    def wrapper(*args,**kwargs):
+    # 使用装饰器改变了被装饰函数的一些特性,如函数名称,可以使用functools解决
+    @functools.wraps(view_func)
+    def wrapper(*args, **kwargs):
         # 1 实现装饰器该完成的新功能
         user_id = session.get("user_id")
 
         user = None  # type:User
 
         # 进行延迟导入,解决循环导入db的问题
-        from  info.models import User
+        from info.models import User
         if user_id:
             try:
                 # 获取用户对象
@@ -41,7 +45,7 @@ def user_login_data(view_func):
         g.user = user
 
         # 2 实现原有函数的基本功能
-        result = view_func(*args,**kwargs)
+        result = view_func(*args, **kwargs)
         return result
 
     return wrapper
