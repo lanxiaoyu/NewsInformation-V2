@@ -106,4 +106,6 @@ def create_app(config_name):
     from info.moduls.passport import passport_bp
     app.register_blueprint(passport_bp)
 
+    from info.moduls.news import news_bp
+    app.register_blueprint(news_bp)
     return app
