@@ -1,5 +1,5 @@
 from config import config_dict
-from flask import Flask, session
+from flask import Flask, session, g, render_template
 from flask_sqlalchemy import SQLAlchemy
 from redis import StrictRedis
 from flask_wtf.csrf import CSRFProtect, generate_csrf
@@ -7,7 +7,7 @@ from flask_session import Session
 import logging
 from logging.handlers import RotatingFileHandler
 
-from info.utils.common import do_index_class
+from info.utils.common import do_index_class, user_login_data
 
 """
  因为manage中需要传入 db,而db的产生需要传入app
@@ -91,6 +91,20 @@ def create_app(config_name):
         response.set_cookie("csrf_token",csrf_token)
         # 3.返回给响应对象
         return response
+
+    # 自动捕获404错误,页面统一处理
+    @app.errorhandler(404)
+    @user_login_data
+    def error_handle(err):
+        user = g.user
+        # 2.对象转成字典
+        data = {
+             "user_info": user.to_dict() if user else None                                 }
+         # 3.渲染模板
+
+        return render_template("news/404.html", data=data)
+
+
 
     # 添加自定义的过滤器
     app.add_template_filter(do_index_class,"do_index_class")
