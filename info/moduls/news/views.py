@@ -48,11 +48,19 @@ def news_detail(news_id):
     # 用户浏览量+1
     news.clicks += 1
 
+    #--------------------------查看用户是否收藏过该条新闻------
+    is_collected = False
+    # 当前用户已登录
+    if user:
+        if news in user.collection_news:
+            is_collected = True
+
         # 4. 组织响应数据字典
     data = {
             "user_info": user.to_dict() if user else None,
             "news_rank_list": news_rank_dict_list,
-            "news":new_dict
+            "news":new_dict,
+            "is_collected":is_collected
         }
 
     return render_template("news/detail.html",data = data)
