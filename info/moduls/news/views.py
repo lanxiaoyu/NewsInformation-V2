@@ -277,13 +277,51 @@ def news_detail(news_id):
             # 评论对象转字典
             comment_dict = comment.to_dict()
             comment_dict_list.append(comment_dict)
-        # 4. 组织响应数据字典
-    data = {
-        "user_info": user.to_dict() if user else None,
-        "news_rank_list": news_rank_dict_list,
-        "news": new_dict,
-        "is_collected": is_collected,
-        "comments":comment_dict_list
-    }
 
-    return render_template("news/detail.html", data=data)
+            # -----------------查询当前用户在当前新闻的评论里边具体点赞了那几条评论------------
+        """
+        comments: [评论对象1，评论对象2,....]
+        """
+        # 1. 查询出当前新闻的所有评论，取得所有评论的id —>  list[1,2,3,4,5,6]
+        comment_id_list = [comment.id for comment in comments]
+
+        # 2.再通过评论点赞模型(CommentLike)查询当前用户点赞了那几条评论  —>[模型1,模型2...]
+        try:
+            commentlike_model_list = CommentLike.query.filter(CommentLike.comment_id.in_(comment_id_list),
+                                                              CommentLike.user_id == user.id).all()
+        except Exception as e:
+            current_app.logger.error(e)
+            return jsonify(errno=RET.DBERR, errmsg="查询评论点赞列表数据异常")
+
+        # 3. 遍历上一步的评论点赞模型列表，获取所以点赞过的评论id（comment_like.comment_id）
+        commentlike_id_list = [commentlike_model.comment_id for commentlike_model in commentlike_model_list]
+
+        """
+            当前用户点赞过赞的评论id列表：commentlike_id_list = [1, 3, 5]
+            comment.id ==> if 1 in [1, 3, 5] ==> comment_dict["is_like"] = True
+            comment.id ==> if 2 in [1, 3, 5] ==> comment_dict["is_like"] = False
+        """
+        # 对象列表转字典列表
+        comment_dict_list = []
+        for comment in comments if comments else []:
+            # 评论对象转字典
+            comment_dict = comment.to_dict()
+            # 借助评论字典帮助携带一个is_like键值对信息，is_like标志位为True:点过赞，反之
+            comment_dict["is_like"] = False
+
+            # 当前评论的id在点过赞的的评论id列表中，将标志位修改成True
+            if comment.id in commentlike_id_list:
+                comment_dict["is_like"] = True
+
+            comment_dict_list.append(comment_dict)
+
+        # 组织响应数据字典
+        data = {
+            "user_info": user.to_dict() if user else None,
+            "news_rank_list": news_rank_dict_list,
+            "news": news_dict,
+            "is_collected": is_collected,
+            "comments": comment_dict_list
+        }
+
+        return render_template("news/detail.html", data=data)
