@@ -168,13 +168,26 @@ def news_detail(news_id):
     if user:
         if news in user.collection_news:
             is_collected = True
-
+            # -----------------查询新闻评论列表数据------------------
+        try:
+            comments = Comment.query.filter(Comment.news_id == news_id) \
+                .order_by(Comment.create_time.desc()).all()
+        except Exception as e:
+            current_app.logger.error(e)
+            return jsonify(errno=RET.DBERR, errmsg="查询评论列表数据异常")
+        # 对象列表转字典列表
+        comment_dict_list = []
+        for comment in comments if comments else []:
+            # 评论对象转字典
+            comment_dict = comment.to_dict()
+            comment_dict_list.append(comment_dict)
         # 4. 组织响应数据字典
     data = {
         "user_info": user.to_dict() if user else None,
         "news_rank_list": news_rank_dict_list,
         "news": new_dict,
-        "is_collected": is_collected
+        "is_collected": is_collected,
+        "comments":comment_dict_list
     }
 
     return render_template("news/detail.html", data=data)
