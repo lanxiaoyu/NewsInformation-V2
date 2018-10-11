@@ -122,4 +122,8 @@ def create_app(config_name):
 
     from info.moduls.news import news_bp
     app.register_blueprint(news_bp)
+
+    #注册个人中心模块
+    from info.moduls.profile import profile_bp
+    app.register_blueprint(profile_bp)
     return app
