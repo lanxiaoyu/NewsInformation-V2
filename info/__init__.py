@@ -126,4 +126,12 @@ def create_app(config_name):
     #注册个人中心模块
     from info.moduls.profile import profile_bp
     app.register_blueprint(profile_bp)
+
+
+    # 注册用户管理模块
+    from info.moduls.admin import admin_bp
+    app.register_blueprint(admin_bp)
+
+
+
     return app
