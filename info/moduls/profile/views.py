@@ -5,9 +5,40 @@ from . import profile_bp
 from info import user_login_data, db, constants
 from info.moduls.profile import profile_bp
 from info.utils.pic_storage import pic_storage
+from info.models import Category
 
 
-# /user/collection?p=页码
+@profile_bp.route('/news_release', methods=['GET', 'POST'])
+@user_login_data
+def news_release():
+    """新闻发布的后端接口"""
+    """获取用户对象"""
+    user = g.user
+    # GET请求：展示新闻发布页面
+    if request.method == 'GET':
+        # 查询分类数据
+        try:
+            categories = Category.query.all()
+        except Exception as e:
+            current_app.logger.error(e)
+            return jsonify({"errno": RET.DBERR, "errmsg": '查询分类数据异常'})
+        # 对象列表转字典列表
+        category_dict_list = []
+        for category in categories if categories else []:
+            category_dict_list.append(category.to_dict())
+
+            #注意: 移除最新分类
+        category_dict_list.pop(0)
+
+        #组织响应数据
+        data = {
+            "categories":category_dict_list
+        }
+        return render_template("profile/user_news_release.html")
+
+    # /user/collection?p=页码
+
+
 @profile_bp.route('/collection')
 @user_login_data
 def user_collection_news():
