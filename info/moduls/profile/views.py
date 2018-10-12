@@ -98,7 +98,7 @@ def news_release():
         data = {
             "categories": category_dict_list
         }
-        return render_template("profile/user_news_release.html")
+        return render_template("profile/user_news_release.html",data=data)
 
     # /user/collection?p=页码
 
@@ -122,7 +122,8 @@ def news_release():
     category_id = request.form.get("category_id")
     digest = request.form.get("digest")
     content = request.form.get("content")
-    index_image = request.form.get("index_image")
+    index_image = request.files.get("index_image")
+    print(title,category_id,digest,content,index_image)
     source = "个人发布"
 
     # 2.1 非空判断
