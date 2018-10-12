@@ -6,6 +6,69 @@ from info import user_login_data, db, constants
 from info.moduls.profile import profile_bp
 from info.utils.pic_storage import pic_storage
 
+
+# /user/collection?p=页码
+@profile_bp.route('/collection')
+@user_login_data
+def user_collection_news():
+    """获取当前用户新闻收藏列表数据"""
+
+    """
+    1.获取参数
+        1.1  user :当前用户对象, p:当前页码(默认值第一页)
+    2.校验参数
+        2.1 非空判断
+    3.逻辑处理
+        3.0 根据user.collection_news,进行分页查询
+    4.返回值
+    """
+    # 获取用户对象
+    user = g.user
+    p = request.args.get('p', 1)
+    # 2.1参数类型判断
+    try:
+        p = int(p)
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify({"errno": RET.PARAMERR, "errmsg": '参数内容错误'})
+    # 当前用户存在的时候采取查询
+
+    """
+    lazylazy="dynamic"设置后：
+   如果没有真实用到user.collection_news，他就是一个查询对象
+   如果真实用到user.collection_news，他就是一个列表
+    """
+    news_collections = []
+    current_page = 1
+    total_page = 1
+    if user:
+        try:
+            paginate = user.collection_news.paginate(p, constants.USER_COLLECTION_MAX_NEWS, False)
+            # 当前页码所有数据
+            news_collections = paginate.items
+            # 当前页码
+            current_page = paginate.page
+            # 总页数
+            total_page = paginate.pages
+
+        except Exception as e:
+            current_app.logger.error(e)
+            return jsonify({"errno": RET.DBERR, "errmsg": ''})
+    # 对象列表转字典列表
+    news_dict_collections = []
+    for news in news_collections if news_collections else []:
+        news_dict_collections.append(news.to_basic_dict())
+
+    # 组织响应数据
+    data = {
+        "collections": news_dict_collections,
+        "current_page": current_page,
+        "total_page": total_page
+    }
+    # 4.返回值
+    return render_template("profile/user_collection.html", data=data)
+
+
 @profile_bp.route('/pass_info', methods=['GET', 'POST'])
 @user_login_data
 def pass_info():
@@ -27,11 +90,11 @@ def pass_info():
         3.2 保存回数据库
     4.返回值
     """
-    #1.1 old_password:旧密码，new_password: 新密码，user:用户对象
+    # 1.1 old_password:旧密码，new_password: 新密码，user:用户对象
     old_password = request.json.get("old_password")
     new_password = request.json.get("new_password")
 
-    #2.1 非空判断
+    # 2.1 非空判断
     if not all([old_password, new_password]):
         return jsonify(errno=RET.PARAMERR, errmsg="参数不足")
 
@@ -50,7 +113,7 @@ def pass_info():
         current_app.logger.error(e)
         db.session.rollback()
         return jsonify(errno=RET.DBERR, errmsg="保存用户密码异常")
-    #4.返回值
+    # 4.返回值
     return jsonify(errno=RET.OK, errmsg="修改密码成功")
 
 
