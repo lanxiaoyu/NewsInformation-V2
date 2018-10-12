@@ -1,5 +1,5 @@
 from flask import g, render_template, request, current_app, jsonify
-from info.models import User
+from info.models import User, News
 from info.utils.response_code import RET
 from . import profile_bp
 from info import user_login_data, db, constants
@@ -37,6 +37,74 @@ def news_release():
         return render_template("profile/user_news_release.html")
 
     # /user/collection?p=页码
+
+    #POST请求:发布新闻
+    """
+    1.获取参数
+        1.1 title:新闻标题,category_id:新闻分类id   digest:新闻摘要,
+            index_image:新闻主图片  content:新闻内容   user:当前用户
+            source:新闻来源(默认值:个人发布)
+    2.校验参数
+        2.1非空判断
+    3.逻辑处理
+        3.0 将新闻主图片上传到七牛云
+        3.1 创建新闻对象,并将其属性赋值
+        3,2 保存会数据库
+    4.返回值
+    """
+
+    #1.1 获取参数
+    title = request.form.get("title")
+    category_id = request.form.get("category_id")
+    digest = request.form.get("digest")
+    content = request.form.get("content")
+    index_image = request.form.get("index_image")
+    source = "个人发布"
+
+    #2.1 非空判断
+
+    if not all([title, category_id, digest, content, index_image]):
+        return jsonify(errno=RET.PARAMERR, errmsg="参数不足")
+
+    #2.2 用户是否登录判断
+    if not user:
+        return jsonify(errno=RET.SESSIONERR, errmsg='用户未登录')
+    try:
+        pic_data = index_image.read()
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify({"errno":RET.PARAMERR, "errmsg": '数据库不能为空'})
+
+    #3.0 将新闻主图片上传七牛云
+    try:
+        pic_name = pic_storage(pic_data)
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify({"errno":RET.THIRDERR, "errmsg": '上传图片到七牛云失败'})
+    #3.1创建新闻对象,并将其属性赋值(8个属性0
+    news = News()
+    news.title = title
+    news.category_id = category_id
+    news.digest = digest
+    news.content = content
+    news.index_image_url = constants.QINIU_DOMIN_PREFIX + pic_name
+    news.source = source
+    news.user_id = user.id
+    #设置新闻发布后的状态为:审核中
+    news.status = 1
+    # 3.2 保存回到数据库
+    try:
+        db.session.add(news)
+        db.session.commit()
+    except Exception as e:
+        current_app.logger.error(e)
+        db.session.rollback()
+        return jsonify({"errno":RET.DBERR, "errmsg": '保存新闻对象异常'})
+    # 4. 返回值
+    return jsonify(errno=RET.OK, errmsg='发布新闻成功')
+
+
+
 
 
 @profile_bp.route('/collection')

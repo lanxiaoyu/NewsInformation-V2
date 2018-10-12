@@ -35,8 +35,8 @@ def get_news_list():
     cid = int(cid)
     page = int(page)
     per_page = int(per_page)
-
-    filters = []
+#条件列表  默认条件:新闻必须审核通过
+    filters = [News.status == 0]
     if cid != 1:
         # 在sqlachemy底层有重写__eq__方法,改变了返回值,返回一个查询条件
         filters.append(News.category_id ==cid)
