@@ -1,10 +1,57 @@
 from flask import g, render_template, request, current_app, jsonify
-
+from info.models import User
 from info.utils.response_code import RET
 from . import profile_bp
 from info import user_login_data, db, constants
 from info.moduls.profile import profile_bp
 from info.utils.pic_storage import pic_storage
+
+@profile_bp.route('/pass_info', methods=['GET', 'POST'])
+@user_login_data
+def pass_info():
+    """修改密码后端接口"""
+    user = g.user
+    # GET请求：返回修改密码页面
+    if request.method == 'GET':
+        return render_template("profile/user_pass_info.html")
+
+    # POST请求：修改用户密码接口
+    """
+    1.获取参数
+        1.1 old_password:旧密码，new_password: 新密码，user:用户对象
+    2.校验参数
+        2.1 非空判断
+    3.逻辑处理
+        3.0 对旧密码进行校验
+        3.1 将新密码赋值到user对象password属性上
+        3.2 保存回数据库
+    4.返回值
+    """
+    #1.1 old_password:旧密码，new_password: 新密码，user:用户对象
+    old_password = request.json.get("old_password")
+    new_password = request.json.get("new_password")
+
+    #2.1 非空判断
+    if not all([old_password, new_password]):
+        return jsonify(errno=RET.PARAMERR, errmsg="参数不足")
+
+    if not user:
+        return jsonify(errno=RET.SESSIONERR, errmsg="用户未登录")
+    # 3.0 对旧密码进行校验
+    if not user.check_passowrd(old_password):
+        return jsonify(errno=RET.DATAERR, errmsg="旧密码填写错误")
+
+    # 3.1 将新密码赋值到user对象password属性上
+    user.password = new_password
+    # 3.2 保存回数据库
+    try:
+        db.session.commit()
+    except Exception as e:
+        current_app.logger.error(e)
+        db.session.rollback()
+        return jsonify(errno=RET.DBERR, errmsg="保存用户密码异常")
+    #4.返回值
+    return jsonify(errno=RET.OK, errmsg="修改密码成功")
 
 
 # 0.0.0:8000/user/info
