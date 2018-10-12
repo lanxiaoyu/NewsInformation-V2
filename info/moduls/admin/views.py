@@ -1,3 +1,4 @@
+import time
 from flask import current_app
 from flask import request, jsonify, redirect, url_for
 from flask import session
@@ -6,7 +7,116 @@ from info.models import User
 from info.utils.response_code import RET
 from . import admin_bp
 from flask import render_template
+from datetime import datetime, timedelta
 
+
+@admin_bp.route('/user_count')
+def user_count():
+
+    # 查询总人数
+    total_count = 0
+    try:
+        # User.is_admin == False查询非管理员用户
+        total_count = User.query.filter(User.is_admin == False).count()
+    except Exception as e:
+        current_app.logger.error(e)
+
+    """
+    time.struct_time(tm_year=2018, tm_mon=10, tm_mday=11, tm_hour=18, tm_min=29, tm_sec=46, tm_wday=3, tm_yday=284, tm_isdst=0)
+    """
+    # 查询月新增数（10-11 <--> 10-01）
+    mon_count = 0
+    try:
+        # 获取当前系统的年月日
+        now = time.localtime()
+        print(now)
+        """
+        每一个月的月初时间（字符串）
+        mon_begin: 2018-10-01
+        mon_begin: 2018-11-01
+        mon_begin: 2019-10-01
+        """
+        mon_begin = '%d-%02d-01' % (now.tm_year, now.tm_mon)
+        # strptime： 时间字符串转换成时间格式 %Y-%m-%d: 2018-10-11
+        mon_begin_date = datetime.strptime(mon_begin, '%Y-%m-%d')
+        # User.create_time >= mon_begin_date表当前用户的创建时间大于每一个月第一天
+        mon_count = User.query.filter(User.is_admin == False, User.create_time >= mon_begin_date).count()
+    except Exception as e:
+        current_app.logger.error(e)
+
+    # 查询日新增数
+    day_count = 0
+    try:
+        """
+        每一天的开始时间
+        day_begin：2018-10-11:00:00   -- 2018-10-11:23:59
+        day_begin：2018-10-12:00:00   -- 2018-10-12:23:59
+        """
+        day_begin = '%d-%02d-%02d' % (now.tm_year, now.tm_mon, now.tm_mday)
+        day_begin_date = datetime.strptime(day_begin, '%Y-%m-%d')
+        day_count = User.query.filter(User.is_admin == False, User.create_time > day_begin_date).count()
+    except Exception as e:
+        current_app.logger.error(e)
+
+    # 查询图表信息
+    # 获取到当天00:00:00时间
+    now_date = datetime.strptime(datetime.now().strftime('%Y-%m-%d'), '%Y-%m-%d')
+    # 定义空数组，保存数据
+    active_date = []
+    active_count = []
+
+    # 依次添加数据，再反转
+    for i in range(0, 31): # 0 1, 2, 3,....30
+        """
+        now_date: 2018-10-11:00:00 减去0天
+        begin_date：2018-10-11:00:00  开始时间
+        end_date: 2018-10-11:23:59    结束时间 = 开始时间 + 1天
+
+
+        now_date: 2018-10-11:00:00 减去1天
+        begin_date：2018-10-10:00:00  开始时间
+        end_date: 2018-10-10:23:59    结束时间 = 开始时间 + 1天
+
+
+        now_date: 2018-10-11:00:00 减去2天
+        begin_date：2018-10-09:00:00  开始时间
+        end_date: 2018-10-09:23:59    结束时间 = 开始时间 + 1天
+        .
+        .
+        .
+        now_date: 2018-10-11:00:00 减去30天
+        begin_date：2018-09-11:00:00  开始时间
+        end_date: 2018-09-1:23:59    结束时间 = 开始时间 + 1天
+
+
+        """
+        # 一天的开始时间
+        begin_date = now_date - timedelta(days=i)
+        # 一天的结束时间
+        end_date = begin_date + timedelta(days=1)
+        # end_date = now_date - timedelta(days=(i - 1))
+
+        # 添加时间 10-11 .. 10-09...
+        active_date.append(begin_date.strftime('%Y-%m-%d'))
+        count = 0
+        try:
+            # 最后一次登录时间 > 大于今天的开始时间
+            # 最后一次登录时间 < 小于今天的结束时间
+            count = User.query.filter(User.is_admin == False, User.last_login >= begin_date,
+                                      User.last_login < end_date).count()
+        except Exception as e:
+            current_app.logger.error(e)
+        # 添加每一天的活跃人数
+        active_count.append(count)
+
+    # 数据反转
+    active_date.reverse()
+    active_count.reverse()
+
+    data = {"total_count": total_count, "mon_count": mon_count, "day_count": day_count, "active_date": active_date,
+            "active_count": active_count}
+
+    return render_template('admin/user_count.html', data=data)
 
 # /admin/index
 @admin_bp.route('/index')
@@ -21,7 +131,15 @@ def admin_login():
     """后台管理登录接口"""
     # get请求：展示登录页
     if request.method == "GET":
-        return render_template("admin/login.html")
+        # 判断管理员用户是否有登录，如果管理员有登录直接进入管理首页（提高用户体验）
+        user_id = session.get("user_id")
+        is_admin = session.get("is_admin", False)
+        if user_id and is_admin:
+            # 当前用户登录 & is_admin=True表示是管理员
+            return redirect(url_for("admin.admin_index"))
+        else:
+            # 不是管理员用户
+            return render_template("admin/login.html")
     # post请求：管理员登录业务逻辑处理
     """
     1.获取参数
@@ -68,5 +186,5 @@ def admin_login():
     session["mobile"] = username
     session["is_admin"] = True
 
-    # 4.重定向到管理首页
+    #4.重定向到管理首页
     return redirect(url_for("admin.admin_index"))

@@ -22,8 +22,8 @@ manager.add_command("db", MigrateCommand)
      """
 
 
-@manager.option('n', "--name", dest="name")
-@manager.option('n', "--password", dest="password")
+@manager.option('-n', "--name", dest="name")
+@manager.option('-p', "--password", dest="password")
 def createsuperuser(name, password):
     """创建管理员用户对象"""
     if not all([name, password]):
