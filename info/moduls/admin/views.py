@@ -3,12 +3,63 @@ from flask import current_app
 from flask import request, jsonify, redirect, url_for
 from flask import session
 from info import db
-from info.models import User
+from info.models import User, News
 from info.utils.response_code import RET
 from . import admin_bp
 from flask import render_template
 from datetime import datetime, timedelta
 from info import constants
+
+
+# /admin/news_review?p=页码
+@admin_bp.route('/news_review')
+def news_review():
+    """
+    新闻审核页面的展示
+    """
+    # 1.获取参数
+    p = request.args.get("p", 1)
+    # 2.校验参数
+    try:
+        p = int(p)
+    except Exception as e:
+        current_app.logger.error(e)
+        p = 1
+    news_list = []
+    current_page = 1
+    total_page = 1
+    # 获取查询关键字
+    keywords = request.args.get("keywords")
+    # 条件列表 默认查询的就是非审核通过的
+    filters = [News.status != 0]
+    if keywords:
+    # 新闻标题包含这个关键字
+        filters.append(News.title.contains(keywords))
+    try:
+        paginate = News.query.filter(*filters).order_by(News.create_time.desc()).paginate(p,
+                                                                                                       constants.ADMIN_USER_PAGE_MAX_COUNT,False)
+        # 获取当前页码的所有数据
+        news_list = paginate.items
+        # 当前页码
+        current_page = paginate.page
+        # 总页数
+        total_page = paginate.pages
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify(errno=RET.DBERR, errmsg="")
+
+    # 模型列表转字典列表
+    news_dict_list = []
+    for news in news_list if news_list else []:
+        news_dict_list.append(news.to_review_dict())
+
+    # 组织响应数据
+    data = {
+        "users": news_dict_list,
+        "current_page": current_page,
+        "total_page": total_page
+    }
+    return render_template("admin/user_list.html", data=data)
 
 
 # /admin/user_list?p=页码
@@ -39,21 +90,20 @@ def user_list():
         total_page = paginate.pages
     except Exception as e:
         current_app.logger.error(e)
-        return jsonify(errno=RET.DBERR, errmsg= "")
+        return jsonify(errno=RET.DBERR, errmsg="")
 
     # 对象列表转字典列表
     user_dict_list = []
     for user in user_list if user_list else []:
         user_dict_list.append(user.to_admin_dict())
 
-    #组织响应数据
+    # 组织响应数据
     data = {
-        "users":user_dict_list,
-        "current_page":current_page,
-        "total_page":total_page
+        "users": user_dict_list,
+        "current_page": current_page,
+        "total_page": total_page
     }
-    return render_template("admin/user_list.html",data = data)
-
+    return render_template("admin/user_list.html", data=data)
 
 
 @admin_bp.route('/user_count')
