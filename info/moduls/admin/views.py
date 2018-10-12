@@ -8,11 +8,56 @@ from info.utils.response_code import RET
 from . import admin_bp
 from flask import render_template
 from datetime import datetime, timedelta
+from info import constants
+
+
+# /admin/user_list?p=页码
+@admin_bp.route('/user_list')
+def user_list():
+    """
+    查询用户列表数据
+    """
+    # 1.获取参数
+    p = request.args.get("p", 1)
+    # 2.校验参数
+    try:
+        p = int(p)
+    except Exception as e:
+        current_app.logger.error(e)
+        p = 1
+    user_list = []
+    current_page = 1
+    total_page = 1
+    try:
+        paginate = User.query.filter(User.is_admin == False).order_by(User.last_login.desc()).paginate(p,
+                                                                                                       constants.ADMIN_USER_PAGE_MAX_COUNT)
+        # 获取当前页码的所有数据
+        user_list = paginate.items
+        # 当前页码
+        current_page = paginate.page
+        # 总页数
+        total_page = paginate.pages
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify(errno=RET.DBERR, errmsg= "")
+
+    # 对象列表转字典列表
+    user_dict_list = []
+    for user in user_list if user_list else []:
+        user_dict_list.append(user.to_admin_dict())
+
+    #组织响应数据
+    data = {
+        "users":user_dict_list,
+        "current_page":current_page,
+        "total_page":total_page
+    }
+    return render_template("admin/user_list.html",data = data)
+
 
 
 @admin_bp.route('/user_count')
 def user_count():
-
     # 查询总人数
     total_count = 0
     try:
@@ -66,7 +111,7 @@ def user_count():
     active_count = []
 
     # 依次添加数据，再反转
-    for i in range(0, 31): # 0 1, 2, 3,....30
+    for i in range(0, 31):  # 0 1, 2, 3,....30
         """
         now_date: 2018-10-11:00:00 减去0天
         begin_date：2018-10-11:00:00  开始时间
@@ -117,6 +162,7 @@ def user_count():
             "active_count": active_count}
 
     return render_template('admin/user_count.html', data=data)
+
 
 # /admin/index
 @admin_bp.route('/index')
@@ -186,5 +232,5 @@ def admin_login():
     session["mobile"] = username
     session["is_admin"] = True
 
-    #4.重定向到管理首页
+    # 4.重定向到管理首页
     return redirect(url_for("admin.admin_index"))
