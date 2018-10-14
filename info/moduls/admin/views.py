@@ -13,6 +13,53 @@ from datetime import datetime, timedelta
 from info import constants
 
 
+# /admin/news_edit?p=页码
+@admin_bp.route('/news_edit')
+def news_edit():
+    """新闻编辑页面的展示"""
+    # 1.获取参数
+    p = request.args.get("p", 1)
+    # 2.校验参数
+    try:
+        p = int(p)
+    except Exception as e:
+        current_app.logger.error(e)
+        p = 1
+
+    news_list = []
+    current_page = 1
+    total_page = 1
+    # 获取查询关键字
+    keywords = request.args.get("keywords")
+    # 条件列表  默认查询的就是非审核通过的
+    filters = []
+    if keywords:
+        # 新闻标题包含这个关键字
+        filters.append(News.title.contains(keywords))
+    try:
+        paginate = News.query.filter(*filters).order_by(News.create_time.desc())\
+            .paginate(p, constants.ADMIN_NEWS_PAGE_MAX_COUNT, False)
+        news_list = paginate.items
+        current_page = paginate.page
+        total_page = paginate.pages
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify(errno=RET.DBERR, errmsg="")
+
+    # 模型列表转换字典列表
+    news_dict_list = []
+    for news in news_list if news_list else []:
+        news_dict_list.append(news.to_review_dict())
+
+    data = {
+        "news_list": news_dict_list,
+        "current_page": current_page,
+        "total_page": total_page
+    }
+
+    return render_template("admin/news_edit.html", data=data)
+
+
 # /admin/news_review_detail?news_id=1
 @admin_bp.route('/news_review_detail', methods=['POST', 'GET'])
 def news_review_detail():
@@ -98,7 +145,6 @@ def news_review_detail():
         return jsonify(errno=RET.DBERR, errmsg="保存新闻对象异常")
 
     return jsonify(errno=RET.OK, errmsg="OK")
-
 
 
 # /admin/news_review?p=页码
