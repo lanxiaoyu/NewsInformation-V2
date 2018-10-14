@@ -1,623 +1,387 @@
-import time
-
-from flask import abort
-from flask import current_app
-from flask import request, jsonify, redirect, url_for
+from flask import current_app, jsonify
+from flask import g
+from flask import request
 from flask import session
-from info import db
-from info.models import User, News, Category
-from info.utils.pic_storage import pic_storage
+from info import constants, db
+from info.models import User, News, Comment, CommentLike
+from info.utils.common import user_login_data
 from info.utils.response_code import RET
-from . import admin_bp
+from . import news_bp
 from flask import render_template
-from datetime import datetime, timedelta
-from info import constants
 
 
-@admin_bp.route('/add_category', methods=['POST'])
-def add_category():
-    """添加、编辑分类"""
+# 127.0.0.1:5000/news/comment_like
+@news_bp.route('/comment_like', methods=['POST'])
+@user_login_data
+def comment_like():
+    """点赞、取消点赞接口"""
     """
     1.获取参数
-        1.1 id:分类id，name:分类名称
+        1.1 comment_id:评论id，user:当前登录用户，action: 点赞/取消点赞的行为
     2.校验参数
         2.1 非空判断
+        2.2 action in ['add', 'remove']
     3.逻辑处理
-        3.0 有id值表示编辑分类
-        3.1 没有id表示新增分类
-    4.返回值
-    """
-    # 1.1 id:分类id，name:分类名称
-    id = request.json.get("id")
-    name = request.json.get("name")
-
-    if not name:
-        return jsonify(errno=RET.PARAMERR, errmsg="参数不足")
-
-    # 3.0 有id值表示编辑分类
-    if id:
-        # 根据分类id查询分类对象
-        try:
-            category = Category.query.get(id)
-        except Exception as e:
-            current_app.logger.error(e)
-            return jsonify(errno=RET.DBERR, errmsg="查询分类对象异常")
-        if not category:
-            return jsonify(errno=RET.NODATA, errmsg="分类不存在")
-        else:
-            # 修改分类名称
-            category.name = name
-    # 3.1 没有id表示新增分类
-    else:
-        # 创建分类对象
-        category = Category()
-        category.name = name
-        # 添加到数据库
-        db.session.add(category)
-
-    # 将分类对象的修改保存回数据库
-    try:
-        db.session.commit()
-    except Exception as e:
-        current_app.logger.error(e)
-        db.session.rollback()
-        return jsonify(errno=RET.DBERR, errmsg="保存分类对象异常")
-
-    return jsonify(errno=RET.OK, errmsg="OK")
-
-
-@admin_bp.route('/news_type')
-def news_type():
-    """新闻分类页面展示"""
-    # 获取分类数据
-    try:
-        categories = Category.query.all()
-    except Exception as e:
-        current_app.logger.error(e)
-        return jsonify(errno=RET.DBERR, errmsg="查询分类异常")
-
-    # 对象列表转字典列表
-    # 模型列表转换字典列表
-    category_dict_list = []
-    for category in categories if categories else []:
-        category_dict = category.to_dict()
-        category_dict_list.append(category_dict)
-
-    # 删除最新分类
-    category_dict_list.pop(0)
-
-    data = {
-        "categories": category_dict_list,
-    }
-    return render_template("admin/news_type.html", data=data)
-
-
-# /admin/news_edit_detail?news_id=1
-@admin_bp.route('/news_edit_detail', methods=['POST', 'GET'])
-def news_edit_detail():
-    """新闻编辑详情页面接口"""
-
-    if request.method == 'GET':
-        """展示详情页面"""
-        # 获取新闻id
-        news_id = request.args.get("news_id")
-        if not news_id:
-            return Exception("参数不足")
-        try:
-            news = News.query.get(news_id)
-        except Exception as e:
-            current_app.logger.error(e)
-            return jsonify(errno=RET.DBERR, errmsg="查询新闻对象异常")
-        # 新闻不存在
-        if not news:
-            abort(404)
-        # 新闻字典
-        news_dict = news.to_dict()
-
-        # 获取分类数据
-        try:
-            categories = Category.query.all()
-        except Exception as e:
-            current_app.logger.error(e)
-            return jsonify(errno=RET.DBERR, errmsg="查询分类异常")
-
-        # 对象列表转字典列表
-        # 模型列表转换字典列表
-        category_dict_list = []
-        for category in categories if categories else []:
-            category_dict = category.to_dict()
-            # 选中当前新闻的分类的标志位
-            category_dict["is_selected"] = False
-            # 当新闻的分类id和遍历拿到的分类id相等时，将标志位改为True
-            if category.id == news.category_id:
-                category_dict["is_selected"] = True
-
-            category_dict_list.append(category_dict)
-
-        # 删除最新分类
-        category_dict_list.pop(0)
-
-        data = {
-            "categories": category_dict_list,
-            "news": news_dict
-        }
-        return render_template("admin/news_edit_detail.html", data=data)
-
-    # POST请求：发布新闻
-    """
-    1.获取参数
-        1.1 title:新闻标题， category_id:新闻分类id，digest:新闻摘要，
-            index_image:新闻主图片（非必传） content: 新闻内容，
-    2.校验参数
-        2.1 非空判断
-    3.逻辑处理
-        3.0 将新闻主图片上传到七牛云
-        3.1 创建新闻对象，并将其属性赋值
-        3.2 保存回数据库
-    4.返回值
-    """
-
-    # 1.1获取参数
-    title = request.form.get("title")
-    category_id = request.form.get("category_id")
-    digest = request.form.get("digest")
-    content = request.form.get("content")
-    index_image = request.files.get("index_image")
-
-    # 获取新闻id
-    news_id = request.form.get("news_id")
-
-    # 2.1 非空判断
-    if not all([title, category_id, digest, content, news_id]):
-        return jsonify(errno=RET.PARAMERR, errmsg="参数不足")
-
-    # 只有图片有更改，才需要上传到七牛云
-    pic_name = None
-    if index_image:
-        try:
-            pic_data = index_image.read()
-        except Exception as e:
-            current_app.logger.error(e)
-            return jsonify(errno=RET.PARAMERR, errmsg="图片数据不能为空")
-
-        # 3.0 将新闻主图片上传到七牛云
-        try:
-            pic_name = pic_storage(pic_data)
-        except Exception as e:
-            current_app.logger.error(e)
-            return jsonify(errno=RET.THIRDERR, errmsg="上传图片到七牛云失败")
-
-    # 3.1 查询新闻对象，并将其属性赋值
-    try:
-        news = News.query.get(news_id)
-    except Exception as e:
-        current_app.logger.error(e)
-        return jsonify(errno=RET.DBERR, errmsg="查询新闻异常")
-
-    if not news:
-        return jsonify(errno=RET.NODATA, errmsg="新闻不存在")
-
-    # 编辑新闻属性
-    news.title = title
-    news.category_id = category_id
-    news.digest = digest
-    news.content = content
-    # 有图片名称才修改
-    if pic_name:
-        news.index_image_url = constants.QINIU_DOMIN_PREFIX + pic_name
-
-    # 3.2 保存回数据库
-    try:
-        db.session.commit()
-    except Exception as e:
-        current_app.logger.error(e)
-        db.session.rollback()
-        return jsonify(errno=RET.DBERR, errmsg="保存新闻对象异常")
-
-    # 4.返回值
-    return jsonify(errno=RET.OK, errmsg="发布新闻成功")
-
-
-# /admin/news_edit?p=页码
-@admin_bp.route('/news_edit')
-def news_edit():
-    """新闻编辑页面的展示"""
-    # 1.获取参数
-    p = request.args.get("p", 1)
-    # 2.校验参数
-    try:
-        p = int(p)
-    except Exception as e:
-        current_app.logger.error(e)
-        p = 1
-
-    news_list = []
-    current_page = 1
-    total_page = 1
-    # 获取查询关键字
-    keywords = request.args.get("keywords")
-    # 条件列表  默认查询的就是非审核通过的
-    filters = []
-    if keywords:
-        # 新闻标题包含这个关键字
-        filters.append(News.title.contains(keywords))
-    try:
-        paginate = News.query.filter(*filters).order_by(News.create_time.desc())\
-            .paginate(p, constants.ADMIN_NEWS_PAGE_MAX_COUNT, False)
-        news_list = paginate.items
-        current_page = paginate.page
-        total_page = paginate.pages
-    except Exception as e:
-        current_app.logger.error(e)
-        return jsonify(errno=RET.DBERR, errmsg="")
-
-    # 模型列表转换字典列表
-    news_dict_list = []
-    for news in news_list if news_list else []:
-        news_dict_list.append(news.to_review_dict())
-
-    data = {
-        "news_list": news_dict_list,
-        "current_page": current_page,
-        "total_page": total_page
-    }
-
-    return render_template("admin/news_edit.html", data=data)
-
-
-# /admin/news_review_detail?news_id=1
-@admin_bp.route('/news_review_detail', methods=['POST', 'GET'])
-def news_review_detail():
-    """新闻审核详情接口"""
-
-    if request.method == 'GET':
-        """展示新闻详情页面"""
-        news_id = request.args.get("news_id")
-
-        if not news_id:
-            return Exception("参数不足")
-
-        try:
-            news = News.query.get(news_id)
-        except Exception as e:
-            current_app.logger.error(e)
-            return jsonify(errno=RET.DBERR, errmsg="查询新闻对象异常")
-        if not news:
-            abort(404)
-
-        # 对象转字典
-        news_dict = news.to_dict() if news else None
-
-        data = {
-            "news": news_dict
-        }
-
-        return render_template("admin/news_review_detail.html", data=data)
-
-    #POST请求：新闻审核
-    """
-    1.获取参数
-        1.1 news_id:新闻id, action: 审核通过、审核不通过
-    2.校验参数
-        2.1 非空判断
-        2.2 action in ['accept', 'reject']
-    3.逻辑处理
-        3.0 根据news_id查询出新闻对象
-        3.1 通过：news.status = 0
-        3.2 拒绝：news.status = -1 , news.reason = 拒绝原因
+        3.0 根据comment_id查询当前评论对象
+        3.1 action等于add表示点赞：先查询commentlike模型对象是否存在，不存在，再创建commentlike该对象并赋值
+        3.2 action等于remove表示取消点赞：先查询commentlike模型对象是否存在，存在，才能去删除commentlike对象
+        3.3 将commentlike对象的修改保存回数据库
     4.返回值
     """
     #1.1 用户对象 新闻id comment_id评论的id，action:(点赞、取消点赞)
     params_dict = request.json
-    news_id = params_dict.get("news_id")
+    comment_id = params_dict.get("comment_id")
     action = params_dict.get("action")
+    # 获取当前登录用户对象
+    user = g.user
 
     #2.1 非空判断
-    if not all([news_id, action]):
+    if not all([comment_id, action]):
         return jsonify(errno=RET.PARAMERR, errmsg="参数不足")
 
-    #2.3 action in ['accept', 'reject']
-    if action not in ['accept', 'reject']:
+    #2.2 用户是否登录判断
+    if not user:
+        return jsonify(errno=RET.SESSIONERR, errmsg="用户未登录")
+
+    #2.3 action in ["add", "remove"]
+    if action not in ["add", "remove"]:
         return jsonify(errno=RET.PARAMERR, errmsg="action参数错误")
 
-    # 3.0 根据news_id查询出新闻对象
+    # 3.0 根据comment_id查询当前评论对象
+    try:
+        comment = Comment.query.get(comment_id)
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify(errno=RET.DBERR, errmsg="查询评论对象异常")
+    if not comment:
+        return jsonify(errno=RET.NODATA, errmsg="评论不存在")
+
+    # 3.1 action等于add表示点赞：先查询commentlike模型对象是否存在，不存在，再创建commentlike该对象并赋值
+    if action == "add":
+        # 点赞
+        try:
+            commentlike = CommentLike.query.filter(CommentLike.comment_id == comment_id,
+                                                   CommentLike.user_id == user.id).first()
+        except Exception as e:
+            current_app.logger.error(e)
+            return jsonify(errno=RET.DBERR, errmsg="查询评论点赞对象异常")
+        # 当前用户并未对当前评论点过赞
+        if not commentlike:
+            # 创建评论点赞模型对象
+            commentlike_obj = CommentLike()
+            commentlike_obj.user_id = user.id
+            commentlike_obj.comment_id = comment_id
+
+            # 添加到数据库
+            db.session.add(commentlike_obj)
+            # 评论对象上的总评论条数累加
+            comment.like_count += 1
+    # 3.2 action等于remove表示取消点赞：先查询commentlike模型对象是否存在，存在，才能去删除commentlike对象
+    else:
+        try:
+            commentlike = CommentLike.query.filter(CommentLike.comment_id == comment_id,
+                                                   CommentLike.user_id == user.id).first()
+        except Exception as e:
+            current_app.logger.error(e)
+            return jsonify(errno=RET.DBERR, errmsg="查询评论点赞对象异常")
+
+        # 当前用户已经对该评论点过赞，再次点击，表取消点赞
+        if commentlike:
+            # 将维护用户和评论之前的第三张表的对象删除，即表示取消点赞
+            db.session.delete(commentlike)
+            # 评论对象上的总评论条数减一
+            comment.like_count -= 1
+
+    # 3.3 将commentlike对象的修改保存回数据库
+    try:
+        db.session.commit()
+    except Exception as e:
+        current_app.logger.error(e)
+        # 回滚
+        db.session.rollback()
+        return jsonify(errno=RET.DBERR, errmsg="点赞/取消点赞失败")
+    # 4.返回值
+    return jsonify(errno=RET.OK, errmsg="OK")
+
+
+# 127.0.0.1:5000/news/news_comment
+@news_bp.route('/news_comment', methods=['POST'])
+@user_login_data
+def news_comment():
+    """发布新闻评论接口(主,子评论)"""
+    """
+    1.获取参数
+        1.1 news_id:新闻id，comment_str:评论的内容， parent_id:子评论的父评论id（非必传）
+    2.校验参数
+        2.1 非空判断
+    3.逻辑处理
+        3.0 根据news_id查询当前新闻
+        3.1 parent_id没有值：创建主评论模型对象，并赋值
+        3.2 parent_id有值： 创建子评论模型对象，并赋值
+        3.3 将评论模型对象保存到数据库
+    4.返回值
+    """
+
+    #1.1 news_id:新闻id，comment_str:评论的内容， parent_id:子评论的父评论id（非必传）
+    params_dict = request.json
+    news_id = params_dict.get("news_id")
+    comment_str = params_dict.get("comment")
+    parent_id = params_dict.get("parent_id")
+    # 获取用户登录信息
+
+    user = g.user
+
+    #2.1 非空判断
+    if not all([news_id, comment_str]):
+        return jsonify(errno=RET.PARAMERR, errmsg="参数不足")
+
+    #2.2 用户是否登录判断
+    if not user:
+        return jsonify(errno=RET.SESSIONERR, errmsg="用户未登录")
+
+    # 3.0 根据news_id查询当前新闻
     try:
         news = News.query.get(news_id)
     except Exception as e:
         current_app.logger.error(e)
         return jsonify(errno=RET.DBERR, errmsg="查询新闻对象异常")
+
     if not news:
         return jsonify(errno=RET.NODATA, errmsg="新闻不存在")
 
-    # 3.1 通过：news.status = 0
-    if action == "accept":
-        news.status = 0
-    # 3.2 拒绝：news.status = -1 , news.reason = 拒绝原因
-    else:
-        # 获取拒绝原因
-        reason = request.json.get("reason")
-        if reason:
-            news.status = -1
-            news.reason = reason
-        else:
-            return jsonify(errno=RET.PARAMERR, errmsg="请填写拒绝原因")
-    # 将新闻对象的修改保存回数据库
+    # 3.1 parent_id没有值：创建主评论模型对象，并赋值
+    comment_obj = Comment()
+    comment_obj.user_id = user.id
+    comment_obj.news_id = news_id
+    comment_obj.content = comment_str
+    # 3.2 parent_id有值： 创建子评论模型对象，并赋值
+    if parent_id:
+        comment_obj.parent_id = parent_id
+
+    # 3.3 将评论模型对象保存到数据库
     try:
+        db.session.add(comment_obj)
         db.session.commit()
     except Exception as e:
         current_app.logger.error(e)
-        db.session.rollback()
-        return jsonify(errno=RET.DBERR, errmsg="保存新闻对象异常")
-
-    return jsonify(errno=RET.OK, errmsg="OK")
-
-
-# /admin/news_review?p=页码
-@admin_bp.route('/news_review')
-def news_review():
-    """新闻审核页面的展示"""
-    # 1.获取参数
-    p = request.args.get("p", 1)
-    # 2.校验参数
-    try:
-        p = int(p)
-    except Exception as e:
-        current_app.logger.error(e)
-        p = 1
-
-    news_list = []
-    current_page = 1
-    total_page = 1
-    # 获取查询关键字
-    keywords = request.args.get("keywords")
-    # 条件列表  默认查询的就是非审核通过的
-    filters = [News.status != 0]
-    if keywords:
-        # 新闻标题包含这个关键字
-        filters.append(News.title.contains(keywords))
-    try:
-        paginate = News.query.filter(*filters).order_by(News.create_time.desc())\
-            .paginate(p, constants.ADMIN_NEWS_PAGE_MAX_COUNT, False)
-        news_list = paginate.items
-        current_page = paginate.page
-        total_page = paginate.pages
-    except Exception as e:
-        current_app.logger.error(e)
-        return jsonify(errno=RET.DBERR, errmsg="")
-
-    # 模型列表转换字典列表
-    news_dict_list = []
-    for news in news_list if news_list else []:
-        news_dict_list.append(news.to_review_dict())
-
-    data = {
-        "news_list": news_dict_list,
-        "current_page": current_page,
-        "total_page": total_page
-    }
-
-    return render_template("admin/news_review.html", data=data)
+        return jsonify(errno=RET.DBERR, errmsg="保存评论对象异常")
+    # 4.返回值
+    return jsonify(errno=RET.OK, errmsg="发布评论成功", data=comment_obj.to_dict())
 
 
-# /admin/user_list?p=页码
-@admin_bp.route('/user_list')
-def user_list():
-    """查询用户列表数据"""
-    # 1.获取参数
-    p = request.args.get("p", 1)
-    # 2.校验参数
-    try:
-        p = int(p)
-    except Exception as e:
-        current_app.logger.error(e)
-        p = 1
-
-    user_list = []
-    current_page = 1
-    total_page = 1
-    try:
-        paginate = User.query.filter(User.is_admin == False).order_by(User.last_login.desc())\
-            .paginate(p, constants.ADMIN_USER_PAGE_MAX_COUNT, False)
-        # 获取当前页码的所有数据
-        user_list = paginate.items
-        # 当前页码
-        current_page = paginate.page
-        # 总页数
-        total_page = paginate.pages
-    except Exception as e:
-        current_app.logger.error(e)
-        return jsonify(errno=RET.DBERR, errmsg="")
-
-    # 对象列表转字典列表
-    user_dict_list = []
-    for user in user_list if user_list else []:
-        user_dict_list.append(user.to_admin_dict())
-
-    # 组织响应数据
-    data = {
-        "users": user_dict_list,
-        "current_page": current_page,
-        "total_page": total_page
-    }
-
-    return render_template("admin/user_list.html", data=data)
-
-
-@admin_bp.route('/user_count')
-def user_count():
-
-    # 查询总人数
-    total_count = 0
-    try:
-        # User.is_admin == False查询非管理员用户
-        total_count = User.query.filter(User.is_admin == False).count()
-    except Exception as e:
-        current_app.logger.error(e)
-
-    """
-    time.struct_time(tm_year=2018, tm_mon=10, tm_mday=11, tm_hour=18, tm_min=29, tm_sec=46, tm_wday=3, tm_yday=284, tm_isdst=0)
-    """
-    # 查询月新增数（10-11 <--> 10-01）
-    mon_count = 0
-    try:
-        # 获取当前系统的年月日
-        now = time.localtime()
-        print(now)
-        """
-        每一个月的月初时间（字符串）
-        mon_begin: 2018-10-01
-        mon_begin: 2018-11-01
-        mon_begin: 2019-10-01
-        """
-        mon_begin = '%d-%02d-01' % (now.tm_year, now.tm_mon)
-        # strptime： 时间字符串转换成时间格式 %Y-%m-%d: 2018-10-11
-        mon_begin_date = datetime.strptime(mon_begin, '%Y-%m-%d')
-        # User.create_time >= mon_begin_date表当前用户的创建时间大于每一个月第一天
-        mon_count = User.query.filter(User.is_admin == False, User.create_time >= mon_begin_date).count()
-    except Exception as e:
-        current_app.logger.error(e)
-
-    # 查询日新增数
-    day_count = 0
-    try:
-        """
-        每一天的开始时间
-        day_begin：2018-10-11:00:00   -- 2018-10-11:23:59
-        day_begin：2018-10-12:00:00   -- 2018-10-12:23:59
-        """
-        day_begin = '%d-%02d-%02d' % (now.tm_year, now.tm_mon, now.tm_mday)
-        day_begin_date = datetime.strptime(day_begin, '%Y-%m-%d')
-        day_count = User.query.filter(User.is_admin == False, User.create_time > day_begin_date).count()
-    except Exception as e:
-        current_app.logger.error(e)
-
-    # 查询图表信息
-    # 获取到当天00:00:00时间
-    now_date = datetime.strptime(datetime.now().strftime('%Y-%m-%d'), '%Y-%m-%d')
-    # 定义空数组，保存数据
-    active_date = []
-    active_count = []
-
-    # 依次添加数据，再反转
-    for i in range(0, 31): # 0 1, 2, 3,....30
-        """
-        now_date: 2018-10-11:00:00 减去0天
-        begin_date：2018-10-11:00:00  开始时间
-        end_date: 2018-10-11:23:59    结束时间 = 开始时间 + 1天
-
-
-        now_date: 2018-10-11:00:00 减去1天
-        begin_date：2018-10-10:00:00  开始时间
-        end_date: 2018-10-10:23:59    结束时间 = 开始时间 + 1天
-
-
-        now_date: 2018-10-11:00:00 减去2天
-        begin_date：2018-10-09:00:00  开始时间
-        end_date: 2018-10-09:23:59    结束时间 = 开始时间 + 1天
-        .
-        .
-        .
-        now_date: 2018-10-11:00:00 减去30天
-        begin_date：2018-09-11:00:00  开始时间
-        end_date: 2018-09-1:23:59    结束时间 = 开始时间 + 1天
-
-
-        """
-        # 一天的开始时间
-        begin_date = now_date - timedelta(days=i)
-        # 一天的结束时间
-        end_date = begin_date + timedelta(days=1)
-        # end_date = now_date - timedelta(days=(i - 1))
-
-        # 添加时间 10-11 .. 10-09...
-        active_date.append(begin_date.strftime('%Y-%m-%d'))
-        count = 0
-        try:
-            # 最后一次登录时间 > 大于今天的开始时间
-            # 最后一次登录时间 < 小于今天的结束时间
-            count = User.query.filter(User.is_admin == False, User.last_login >= begin_date,
-                                      User.last_login < end_date).count()
-        except Exception as e:
-            current_app.logger.error(e)
-        # 添加每一天的活跃人数
-        active_count.append(count)
-
-    # 数据反转
-    active_date.reverse()
-    active_count.reverse()
-
-    data = {"total_count": total_count, "mon_count": mon_count, "day_count": day_count, "active_date": active_date,
-            "active_count": active_count}
-
-    return render_template('admin/user_count.html', data=data)
-
-# /admin/index
-@admin_bp.route('/index')
-def admin_index():
-    """后台管理首页"""
-    return render_template("admin/index.html")
-
-
-# /admin/login
-@admin_bp.route('/login', methods=['POST', 'GET'])
-def admin_login():
-    """后台管理登录接口"""
-    # get请求：展示登录页
-    if request.method == "GET":
-        # 判断管理员用户是否有登录，如果管理员有登录直接进入管理首页（提高用户体验）
-        user_id = session.get("user_id")
-        is_admin = session.get("is_admin", False)
-        if user_id and is_admin:
-            # 当前用户登录 & is_admin=True表示是管理员
-            return redirect(url_for("admin.admin_index"))
-        else:
-            # 不是管理员用户
-            return render_template("admin/login.html")
-    # post请求：管理员登录业务逻辑处理
+# 127.0.0.1:5000/news/news_collect
+@news_bp.route('/news_collect', methods=['POST'])
+@user_login_data
+def news_collect():
+    """点击收藏/取消收藏的后端接口实现"""
     """
     1.获取参数
-        1.1 username: 账号， password:密码
+        1.1 news_id:当前新闻id，action:收藏or取消收藏的行为（'collect','cancel_collect'）
     2.校验参数
         2.1 非空判断
+        2.2 action必须是在['collect','cancel_collect']列表内
     3.逻辑处理
-        3.0 根据username查询用户
-        3.1 name.check_password进行密码校验
-        3.2 管理员用户数据保存到session
+        3.0 根据新闻id查询新闻对象
+        3.1 收藏：将当前新闻添加到user.collection_news列中
+        3.2 取消收藏：将当前新闻从user.collection_news列中移除
     4.返回值
-        4.1 跳转到管理首页
     """
-    # 1.1 username: 账号， password:密码
-    username = request.form.get("username")
-    password = request.form.get("password")
-    # 2.1 非空判断
-    if not all([username, password]):
-        return render_template("admin/login.html", errmsg="参数不足")
+    # 1.1 news_id:当前新闻id，action:收藏or取消收藏的行为（'collect','cancel_collect'）
+    param_dict = request.json
+    news_id = param_dict.get('news_id')
+    action = param_dict.get('action')
+    # 获取当前登录的用户对象
+    user = g.user
 
-    # 3.0 根据username查询用户
+    # 2.1 非空判断
+    if not all([news_id, action]):
+        return jsonify(errno=RET.PARAMERR, errmsg="参数不足")
+    # 判断用户是否有登录
+    if not user:
+        return jsonify(errno=RET.SESSIONERR, errmsg="用户未登录")
+    # 2.2 action必须是在['collect','cancel_collect']列表内
+    if action not in ["collect", "cancel_collect"]:
+        return jsonify(errno=RET.PARAMERR, errmsg="参数的内容错误")
+
+    # 3.0 根据新闻id查询新闻对象
     try:
-        admin_user = User.query.filter(User.mobile == username, User.is_admin == True).first()
+        news = News.query.get(news_id)
     except Exception as e:
         current_app.logger.error(e)
-        return render_template("admin/login.html", errmsg="查询管理员用户对象异常")
-    if not admin_user:
-        return render_template("admin/login.html", errmsg="管理员用户不存在")
+        return jsonify(errno=RET.DBERR, errmsg="查询新闻数据异常")
 
-    # 3.1 user.check_password进行密码校验
-    if not admin_user.check_passowrd(password):
-        return render_template("admin/login.html", errmsg="密码填写错误")
-    # 保存回数据库
+    if not news:
+        return jsonify(errno=RET.NODATA, errmsg="新闻不存在")
+
+    # 3.1 收藏：将当前新闻添加到user.collection_news列中
+    if action == "collect":
+        # 收藏
+        user.collection_news.append(news)
+    # 3.2 取消收藏：将当前新闻从user.collection_news列中移除
+    else:
+        # 只有新闻在用户新闻收藏列表中才去移除
+        if news in user.collection_news:
+            user.collection_news.remove(news)
+
+    # 将用户收藏列表的修改操作保存回数据库
     try:
         db.session.commit()
     except Exception as e:
         current_app.logger.error(e)
+        # 回滚
         db.session.rollback()
-        return render_template("admin/login.html", errmsg="保存用户对象异常")
+        return jsonify(errno=RET.DBERR, errmsg="保存新闻收藏列表数据异常")
 
-    # 3.2 管理员用户数据保存到session
-    session["nick_name"] = username
-    session["user_id"] = admin_user.id
-    session["mobile"] = username
-    session["is_admin"] = True
+    # 4.返回值
+    return jsonify(errno=RET.OK, errmsg="OK!")
 
-    #4.重定向到管理首页
-    return redirect(url_for("admin.admin_index"))
+
+# 127.0.0.1:5000/news/127
+@news_bp.route('/<int:news_id>')
+@user_login_data
+def news_detail(news_id):
+    """展示新闻详情页面"""
+    # ------------------获取用户登录信息------------------
+
+    # 从装饰器的g对象中获取到当前登录的用户
+    user = g.user
+
+    """
+    基本格式：
+    if user:
+        user_info = user.to_dict()
+
+    数据格式：
+        "data": {
+                "user_info": {"id": self.id}
+            }
+    使用方式：data.user_info.id
+    """
+
+    # ------------------获取新闻点击排行数据------------------
+    try:
+        news_rank_list = News.query.order_by(News.clicks.desc()).limit(constants.CLICK_RANK_MAX_NEWS).all()
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify(errno=RET.DBERR, errmsg="查询新闻排行数据异常")
+
+    """
+    # news_rank_list 对象列表===》 [news1, news2, ...新闻对象 ]
+    # news_rank_dict_list 字典列表===> [{新闻字典}, {}, {}]
+    """
+    # 字典列表初始化
+    news_rank_dict_list = []
+    # 将新闻对象列表转换成字典列表
+    for news_obj in news_rank_list if news_rank_list else []:
+        # 将新闻对象转成字典
+        news_dict = news_obj.to_dict()
+        # 构建字典列表
+        news_rank_dict_list.append(news_dict)
+
+    # ------------------获取新闻详情数据------------------
+    try:
+        news = News.query.get(news_id)
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify(errno=RET.DBERR, errmsg="查询新闻详情数据异常")
+    # 新闻详情对象转换成字典
+    news_dict = news.to_dict() if news else None
+
+    # 用户浏览量累加
+    news.clicks += 1
+
+    # -----------------查询当前用户是否收藏当前新闻------------------
+    # is_collected = True表示当前用户收藏过该新闻 反之
+    is_collected = False
+    # 标示当前登录用户是否对该新闻的作者有关注
+    is_followed = False
+
+    # 当前用户已经登录
+    if user:
+        if news in user.collection_news:
+            # 当前新闻在用户的新闻收藏列表内，表示已经收藏
+            is_collected = True
+
+    # 判断当前登录用户是否对该新闻的作者有关注
+
+    try:
+        author = User.query.filter(User.id == news.user_id).first()
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify(errno=RET.DBERR, errmsg="查询作者对象异常")
+
+    # 当前用户处于登录状态，当前新闻有作者
+    if user and author:
+        """
+        当前用户：user
+        作者：author
+
+        用户在作者的粉丝列表中,表示当前用户关注过作者
+        user in author.followers
+
+        当前作者在用户的偶像列表中，表示当前用户关注过作者
+        author in user.followed
+        """
+        if author in user.followed:
+            is_followed = True
+
+
+    #-----------------查询新闻评论列表数据------------------
+    try:
+        comments = Comment.query.filter(Comment.news_id == news_id)\
+            .order_by(Comment.create_time.desc()).all()
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify(errno=RET.DBERR, errmsg="查询评论列表数据异常")
+
+    # -----------------查询当前用户在当前新闻的评论里边具体点赞了那几条评论------------
+    commentlike_id_list = []
+    if user:
+        """
+            comments: [评论对象1，评论对象2,....]
+            """
+        # 1. 查询出当前新闻的所有评论，取得所有评论的id —>  list[1,2,3,4,5,6]
+        comment_id_list = [comment.id for comment in comments]
+
+        # 2.再通过评论点赞模型(CommentLike)查询当前用户点赞了那几条评论  —>[模型1,模型2...]
+        try:
+            commentlike_model_list = CommentLike.query.filter(CommentLike.comment_id.in_(comment_id_list),
+                                                              CommentLike.user_id == user.id).all()
+        except Exception as e:
+            current_app.logger.error(e)
+            return jsonify(errno=RET.DBERR, errmsg="查询评论点赞列表数据异常")
+
+        # 3. 遍历上一步的评论点赞模型列表，获取所以点赞过的评论id（comment_like.comment_id）
+        commentlike_id_list = [commentlike_model.comment_id for commentlike_model in commentlike_model_list]
+
+    """
+        当前用户点赞过赞的评论id列表：commentlike_id_list = [1, 3, 5]
+        comment.id ==> if 1 in [1, 3, 5] ==> comment_dict["is_like"] = True
+        comment.id ==> if 2 in [1, 3, 5] ==> comment_dict["is_like"] = False
+    """
+    # 对象列表转字典列表
+    comment_dict_list = []
+    for comment in comments if comments else []:
+        # 评论对象转字典
+        comment_dict = comment.to_dict()
+        # 借助评论字典帮助携带一个is_like键值对信息，is_like标志位为True:点过赞，反之
+        comment_dict["is_like"] = False
+
+        # 当前评论的id在点过赞的的评论id列表中，将标志位修改成True
+        if comment.id in commentlike_id_list:
+            comment_dict["is_like"] = True
+
+        comment_dict_list.append(comment_dict)
+
+
+    # 组织响应数据字典
+    data = {
+        "user_info": user.to_dict() if user else None,
+        "news_rank_list": news_rank_dict_list,
+        "news": news_dict,
+        "is_collected": is_collected,
+        "is_followed": is_followed,
+        "comments": comment_dict_list
+    }
+
+    return render_template("news/detail.html", data=data)

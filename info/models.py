@@ -49,8 +49,8 @@ class User(BaseModel, db.Model):
     # user.collection_news : 该用户收藏的新闻列表
     collection_news = db.relationship("News", secondary=tb_user_collection, lazy="dynamic")  # 用户收藏的新闻
     # 用户所有的粉丝，添加了反向引用followed，代表用户都关注了哪些人
-    # user.followers: 该用户被那些人关注了
-    # user.followed: 该用户关注了那些人
+    # user.followers: 该用户的粉丝列表
+     # user.followed: 该用户偶像列表
     followers = db.relationship('User',
                                 secondary=tb_user_follows,
                                 primaryjoin=id == tb_user_follows.c.followed_id,
