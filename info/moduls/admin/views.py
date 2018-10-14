@@ -42,14 +42,71 @@ def news_review_detail():
 
         return render_template("admin/news_review_detail.html", data=data)
 
+    #POST请求：新闻审核
+    """
+    1.获取参数
+        1.1 news_id:新闻id, action: 审核通过、审核不通过
+    2.校验参数
+        2.1 非空判断
+        2.2 action in ['accept', 'reject']
+    3.逻辑处理
+        3.0 根据news_id查询出新闻对象
+        3.1 通过：news.status = 0
+        3.2 拒绝：news.status = -1 , news.reason = 拒绝原因
+    4.返回值
+    """
+    #1.1 用户对象 新闻id comment_id评论的id，action:(点赞、取消点赞)
+    params_dict = request.json
+    news_id = params_dict.get("news_id")
+    action = params_dict.get("action")
+
+    #2.1 非空判断
+    if not all([news_id, action]):
+        return jsonify(errno=RET.PARAMERR, errmsg="参数不足")
+
+    #2.3 action in ['accept', 'reject']
+    if action not in ['accept', 'reject']:
+        return jsonify(errno=RET.PARAMERR, errmsg="action参数错误")
+
+    # 3.0 根据news_id查询出新闻对象
+    try:
+        news = News.query.get(news_id)
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify(errno=RET.DBERR, errmsg="查询新闻对象异常")
+    if not news:
+        return jsonify(errno=RET.NODATA, errmsg="新闻不存在")
+
+    # 3.1 通过：news.status = 0
+    if action == "accept":
+        news.status = 0
+    # 3.2 拒绝：news.status = -1 , news.reason = 拒绝原因
+    else:
+        # 获取拒绝原因
+        reason = request.json.get("reason")
+        if reason:
+            news.status = -1
+            news.reason = reason
+        else:
+            return jsonify(errno=RET.PARAMERR, errmsg="请填写拒绝原因")
+    # 将新闻对象的修改保存回数据库
+    try:
+        db.session.commit()
+    except Exception as e:
+        current_app.logger.error(e)
+        db.session.rollback()
+        return jsonify(errno=RET.DBERR, errmsg="保存新闻对象异常")
+
+    return jsonify(errno=RET.OK, errmsg="OK")
+
+
+
 # /admin/news_review?p=页码
 @admin_bp.route('/news_review')
 def news_review():
     """新闻审核页面的展示"""
     # 1.获取参数
-    print(1111)
     p = request.args.get("p", 1)
-    print(p)
     # 2.校验参数
     try:
         p = int(p)
