@@ -5,12 +5,64 @@ from flask import current_app
 from flask import request, jsonify, redirect, url_for
 from flask import session
 from info import db
-from info.models import User, News
+from info.models import User, News, Category
 from info.utils.response_code import RET
 from . import admin_bp
 from flask import render_template
 from datetime import datetime, timedelta
 from info import constants
+
+
+# /admin/news_edit_detail?news_id=1
+@admin_bp.route('/news_edit_detail', methods=['POST', 'GET'])
+def news_edit_detail():
+    """新闻编辑详情页面接口"""
+
+    if request.method == 'GET':
+        """展示详情页面"""
+        # 获取新闻id
+        news_id = request.args.get("news_id")
+        if not news_id:
+            return Exception("参数不足")
+        try:
+            news = News.query.get(news_id)
+        except Exception as e:
+            current_app.logger.error(e)
+            return jsonify(errno=RET.DBERR, errmsg="查询新闻对象异常")
+        # 新闻不存在
+        if not news:
+            abort(404)
+        # 新闻字典
+        news_dict = news.to_dict()
+
+        # 获取分类数据
+        try:
+            categories = Category.query.all()
+        except Exception as e:
+            current_app.logger.error(e)
+            return jsonify(errno=RET.DBERR, errmsg="查询分类异常")
+
+        # 对象列表转字典列表
+        # 模型列表转换字典列表
+        category_dict_list = []
+        for category in categories if categories else []:
+            category_dict = category.to_dict()
+            # 选中当前新闻的分类的标志位
+            category_dict["is_selected"] = False
+            # 当新闻的分类id和遍历拿到的分类id相等时，将标志位改为True
+            if category.id == news.category_id:
+                category_dict["is_selected"] = True
+
+            category_dict_list.append(category_dict)
+
+        # 删除最新分类
+        category_dict_list.pop(0)
+
+        data = {
+            "categories": category_dict_list,
+            "news": news_dict
+        }
+        return render_template("admin/news_edit_detail.html", data=data)
 
 
 # /admin/news_edit?p=页码
