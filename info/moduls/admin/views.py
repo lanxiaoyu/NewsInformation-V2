@@ -1,4 +1,6 @@
 import time
+
+from flask import abort
 from flask import current_app
 from flask import request, jsonify, redirect, url_for
 from flask import session
@@ -11,63 +13,88 @@ from datetime import datetime, timedelta
 from info import constants
 
 
+# /admin/news_review_detail?news_id=1
+@admin_bp.route('/news_review_detail', methods=['POST', 'GET'])
+def news_review_detail():
+    """新闻审核详情接口"""
+
+    if request.method == 'GET':
+        """展示新闻详情页面"""
+        news_id = request.args.get("news_id")
+
+        if not news_id:
+            return Exception("参数不足")
+
+        try:
+            news = News.query.get(news_id)
+        except Exception as e:
+            current_app.logger.error(e)
+            return jsonify(errno=RET.DBERR, errmsg="查询新闻对象异常")
+        if not news:
+            abort(404)
+
+        # 对象转字典
+        news_dict = news.to_dict() if news else None
+
+        data = {
+            "news": news_dict
+        }
+
+        return render_template("admin/news_review_detail.html", data=data)
+
 # /admin/news_review?p=页码
 @admin_bp.route('/news_review')
 def news_review():
-    """
-    新闻审核页面的展示
-    """
+    """新闻审核页面的展示"""
     # 1.获取参数
+    print(1111)
     p = request.args.get("p", 1)
+    print(p)
     # 2.校验参数
     try:
         p = int(p)
     except Exception as e:
         current_app.logger.error(e)
         p = 1
+
     news_list = []
     current_page = 1
     total_page = 1
     # 获取查询关键字
     keywords = request.args.get("keywords")
-    # 条件列表 默认查询的就是非审核通过的
+    # 条件列表  默认查询的就是非审核通过的
     filters = [News.status != 0]
     if keywords:
-    # 新闻标题包含这个关键字
+        # 新闻标题包含这个关键字
         filters.append(News.title.contains(keywords))
     try:
-        paginate = News.query.filter(*filters).order_by(News.create_time.desc()).paginate(p,
-                                                                                                       constants.ADMIN_USER_PAGE_MAX_COUNT,False)
-        # 获取当前页码的所有数据
+        paginate = News.query.filter(*filters).order_by(News.create_time.desc())\
+            .paginate(p, constants.ADMIN_NEWS_PAGE_MAX_COUNT, False)
         news_list = paginate.items
-        # 当前页码
         current_page = paginate.page
-        # 总页数
         total_page = paginate.pages
     except Exception as e:
         current_app.logger.error(e)
         return jsonify(errno=RET.DBERR, errmsg="")
 
-    # 模型列表转字典列表
+    # 模型列表转换字典列表
     news_dict_list = []
     for news in news_list if news_list else []:
         news_dict_list.append(news.to_review_dict())
 
-    # 组织响应数据
     data = {
-        "users": news_dict_list,
+        "news_list": news_dict_list,
         "current_page": current_page,
         "total_page": total_page
     }
-    return render_template("admin/user_list.html", data=data)
+
+    return render_template("admin/news_review.html", data=data)
 
 
 # /admin/user_list?p=页码
 @admin_bp.route('/user_list')
 def user_list():
-    """
-    查询用户列表数据
-    """
+    """查询用户列表数据"""
     # 1.获取参数
     p = request.args.get("p", 1)
     # 2.校验参数
@@ -76,12 +103,13 @@ def user_list():
     except Exception as e:
         current_app.logger.error(e)
         p = 1
+
     user_list = []
     current_page = 1
     total_page = 1
     try:
-        paginate = User.query.filter(User.is_admin == False).order_by(User.last_login.desc()).paginate(p,
-                                                                                                       constants.ADMIN_USER_PAGE_MAX_COUNT)
+        paginate = User.query.filter(User.is_admin == False).order_by(User.last_login.desc())\
+            .paginate(p, constants.ADMIN_USER_PAGE_MAX_COUNT, False)
         # 获取当前页码的所有数据
         user_list = paginate.items
         # 当前页码
@@ -103,11 +131,13 @@ def user_list():
         "current_page": current_page,
         "total_page": total_page
     }
+
     return render_template("admin/user_list.html", data=data)
 
 
 @admin_bp.route('/user_count')
 def user_count():
+
     # 查询总人数
     total_count = 0
     try:
@@ -161,7 +191,7 @@ def user_count():
     active_count = []
 
     # 依次添加数据，再反转
-    for i in range(0, 31):  # 0 1, 2, 3,....30
+    for i in range(0, 31): # 0 1, 2, 3,....30
         """
         now_date: 2018-10-11:00:00 减去0天
         begin_date：2018-10-11:00:00  开始时间
@@ -212,7 +242,6 @@ def user_count():
             "active_count": active_count}
 
     return render_template('admin/user_count.html', data=data)
-
 
 # /admin/index
 @admin_bp.route('/index')
@@ -282,5 +311,5 @@ def admin_login():
     session["mobile"] = username
     session["is_admin"] = True
 
-    # 4.重定向到管理首页
+    #4.重定向到管理首页
     return redirect(url_for("admin.admin_index"))
