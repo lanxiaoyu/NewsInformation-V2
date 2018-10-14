@@ -14,6 +14,32 @@ from datetime import datetime, timedelta
 from info import constants
 
 
+@admin_bp.route('/news_type')
+def news_type():
+    """新闻分类页面展示"""
+    # 获取分类数据
+    try:
+        categories = Category.query.all()
+    except Exception as e:
+        current_app.logger.error(e)
+        return jsonify(errno=RET.DBERR, errmsg="查询分类异常")
+
+    # 对象列表转字典列表
+    # 模型列表转换字典列表
+    category_dict_list = []
+    for category in categories if categories else []:
+        category_dict = category.to_dict()
+        category_dict_list.append(category_dict)
+
+    # 删除最新分类
+    category_dict_list.pop(0)
+
+    data = {
+        "categories": category_dict_list,
+    }
+    return render_template("admin/news_type.html", data=data)
+
+
 # /admin/news_edit_detail?news_id=1
 @admin_bp.route('/news_edit_detail', methods=['POST', 'GET'])
 def news_edit_detail():
