@@ -14,6 +14,58 @@ from datetime import datetime, timedelta
 from info import constants
 
 
+@admin_bp.route('/add_category', methods=['POST'])
+def add_category():
+    """添加、编辑分类"""
+    """
+    1.获取参数
+        1.1 id:分类id，name:分类名称
+    2.校验参数
+        2.1 非空判断
+    3.逻辑处理
+        3.0 有id值表示编辑分类
+        3.1 没有id表示新增分类
+    4.返回值
+    """
+    # 1.1 id:分类id，name:分类名称
+    id = request.json.get("id")
+    name = request.json.get("name")
+
+    if not name:
+        return jsonify(errno=RET.PARAMERR, errmsg="参数不足")
+
+    # 3.0 有id值表示编辑分类
+    if id:
+        # 根据分类id查询分类对象
+        try:
+            category = Category.query.get(id)
+        except Exception as e:
+            current_app.logger.error(e)
+            return jsonify(errno=RET.DBERR, errmsg="查询分类对象异常")
+        if not category:
+            return jsonify(errno=RET.NODATA, errmsg="分类不存在")
+        else:
+            # 修改分类名称
+            category.name = name
+    # 3.1 没有id表示新增分类
+    else:
+        # 创建分类对象
+        category = Category()
+        category.name = name
+        # 添加到数据库
+        db.session.add(category)
+
+    # 将分类对象的修改保存回数据库
+    try:
+        db.session.commit()
+    except Exception as e:
+        current_app.logger.error(e)
+        db.session.rollback()
+        return jsonify(errno=RET.DBERR, errmsg="保存分类对象异常")
+
+    return jsonify(errno=RET.OK, errmsg="OK")
+
+
 @admin_bp.route('/news_type')
 def news_type():
     """新闻分类页面展示"""
