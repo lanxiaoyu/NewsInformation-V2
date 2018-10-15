@@ -4,9 +4,9 @@ from flask import request
 from flask import session
 from info import constants, db
 from info.models import User, News, Comment, CommentLike
+from info.moduls.news import news_bp
 from info.utils.common import user_login_data
 from info.utils.response_code import RET
-from . import news_bp
 from flask import render_template
 
 
